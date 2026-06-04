@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:collection/collection.dart';
 import 'package:common/model/device.dart';
@@ -38,20 +40,41 @@ import 'package:routerino/routerino.dart';
 const _horizontalPadding = 15.0;
 final _options = FilePickerOption.getOptionsForPlatform();
 
-class SendTab extends StatelessWidget {
+class SendTab extends StatefulWidget {
   const SendTab();
+
+  @override
+  State<SendTab> createState() => _SendTabState();
+}
+
+class _SendTabState extends State<SendTab> {
+  int _selectedFilterTab = 0;
 
   @override
   Widget build(BuildContext context) {
     return ViewModelBuilder(
       provider: (ref) => sendTabVmProvider,
-      init: (context) async => context.global.dispatchAsync(SendTabInitAction(context)), // ignore: discarded_futures
+      init: (context) async => context.global.dispatchAsync(SendTabInitAction(context)),
       builder: (context, vm) {
         final sizingInformation = SizingInformation(MediaQuery.sizeOf(context).width);
         final buttonWidth = sizingInformation.isDesktop ? BigButton.desktopWidth : BigButton.mobileWidth;
         final ref = context.ref;
+
+        // Both filter tabs show the same nearbyDevices for now;
+        // "All Network" could be extended later to include non-LocalSend hosts
+        final displayedDevices = vm.nearbyDevices;
+
         return Stack(
           children: [
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [kBgDark, kBgDark2],
+                ),
+              ),
+            ),
             ResponsiveListView(
               padding: EdgeInsets.zero,
               children: [
@@ -61,7 +84,10 @@ class SendTab extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
                     child: Text(
                       t.sendTab.selection.title,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white.withOpacity(0.85),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   ResponsiveWrapView(
@@ -75,113 +101,137 @@ class SendTab extends StatelessWidget {
                         label: option.label,
                         filled: false,
                         onTap: () async => ref.global.dispatchAsync(
-                          PickFileAction(
-                            option: option,
-                            context: context,
-                          ),
+                          PickFileAction(option: option, context: context),
                         ),
                       );
                     }).toList(),
                   ),
                 ] else ...[
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
-                    child: Padding(
-                      padding: const EdgeInsetsDirectional.only(start: 15, top: 5, bottom: 15),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                t.sendTab.selection.title,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const Spacer(),
-                              CustomIconButton(
-                                onPressed: () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
-                                child: Icon(Icons.close, color: Theme.of(context).colorScheme.secondary),
-                              ),
-                              const SizedBox(width: 5),
-                            ],
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      bottom: 10,
+                      left: _horizontalPadding,
+                      right: _horizontalPadding,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: kGlassFill,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: kGlassBorder, width: 1),
                           ),
-                          const SizedBox(height: 5),
-                          Text(t.sendTab.selection.files(files: vm.selectedFiles.length)),
-                          Text(t.sendTab.selection.size(size: vm.selectedFiles.fold(0, (prev, curr) => prev + curr.size).asReadableFileSize)),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            height: defaultThumbnailSize,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: vm.selectedFiles.length,
-                              itemBuilder: (context, index) {
-                                final file = vm.selectedFiles[index];
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 10),
-                                  child: SmartFileThumbnail.fromCrossFile(file),
-                                );
-                              },
+                          child: Padding(
+                            padding: const EdgeInsetsDirectional.only(
+                              start: 15,
+                              top: 5,
+                              bottom: 15,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      t.sendTab.selection.title,
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    CustomIconButton(
+                                      onPressed: () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
+                                      child: Icon(Icons.close, color: kAccentCyan.withOpacity(0.8)),
+                                    ),
+                                    const SizedBox(width: 5),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  t.sendTab.selection.files(files: vm.selectedFiles.length),
+                                  style: TextStyle(color: Colors.white.withOpacity(0.6)),
+                                ),
+                                Text(
+                                  t.sendTab.selection.size(
+                                    size: vm.selectedFiles.fold(0, (prev, curr) => prev + curr.size).asReadableFileSize,
+                                  ),
+                                  style: TextStyle(color: Colors.white.withOpacity(0.6)),
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  height: defaultThumbnailSize,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: vm.selectedFiles.length,
+                                    itemBuilder: (context, index) {
+                                      final file = vm.selectedFiles[index];
+                                      return Padding(
+                                        padding: const EdgeInsets.only(right: 10),
+                                        child: SmartFileThumbnail.fromCrossFile(file),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.white.withOpacity(0.7),
+                                      ),
+                                      onPressed: () async {
+                                        await context.push(() => const SelectedFilesPage());
+                                      },
+                                      child: Text(t.general.edit),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    _NeonButton(
+                                      onPressed: () async {
+                                        if (_options.length == 1) {
+                                          await ref.global.dispatchAsync(
+                                            PickFileAction(option: _options.first, context: context),
+                                          );
+                                          return;
+                                        }
+                                        await AddFileDialog.open(context: context, options: _options);
+                                      },
+                                      icon: Icons.add,
+                                      label: t.general.add,
+                                    ),
+                                    const SizedBox(width: 15),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Theme.of(context).colorScheme.onSurface,
-                                ),
-                                onPressed: () async {
-                                  await context.push(() => const SelectedFilesPage());
-                                },
-                                child: Text(t.general.edit),
-                              ),
-                              const SizedBox(width: 15),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(context).colorScheme.primary,
-                                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                ),
-                                onPressed: () async {
-                                  if (_options.length == 1) {
-                                    // open directly
-                                    await ref.global.dispatchAsync(
-                                      PickFileAction(
-                                        option: _options.first,
-                                        context: context,
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  await AddFileDialog.open(
-                                    context: context,
-                                    options: _options,
-                                  );
-                                },
-                                icon: const Icon(Icons.add),
-                                label: Text(t.general.add),
-                              ),
-                              const SizedBox(width: 15),
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ],
+
+                // ── Devices header row ──────────────────────────────────────
                 Row(
                   children: [
                     const SizedBox(width: _horizontalPadding),
                     Flexible(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Text(t.sendTab.nearbyDevices, style: Theme.of(context).textTheme.titleMedium),
+                        child: Text(
+                          t.sendTab.nearbyDevices,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white.withOpacity(0.85),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    _ScanButton(
-                      ips: vm.localIps,
-                    ),
+                    _ScanButton(ips: vm.localIps),
                     Tooltip(
                       message: t.sendTab.manualSending,
                       child: CustomIconButton(
@@ -201,18 +251,38 @@ class SendTab extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (vm.nearbyDevices.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
+
+                // ── Filter tabs ─────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+                  child: _DeviceFilterTabs(
+                    selectedIndex: _selectedFilterTab,
+                    onChanged: (i) => setState(() => _selectedFilterTab = i),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // ── Device list ─────────────────────────────────────────────
+                if (displayedDevices.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      bottom: 10,
+                      left: _horizontalPadding,
+                      right: _horizontalPadding,
+                    ),
                     child: Opacity(
                       opacity: 0.3,
-                      child: DevicePlaceholderListTile(),
+                      child: const DevicePlaceholderListTile(),
                     ),
                   ),
-                ...vm.nearbyDevices.map((device) {
+                ...displayedDevices.map((device) {
                   final favoriteEntry = vm.favoriteDevices.findDevice(device);
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
+                    padding: const EdgeInsets.only(
+                      bottom: 10,
+                      left: _horizontalPadding,
+                      right: _horizontalPadding,
+                    ),
                     child: Hero(
                       tag: 'device-${device.ip}',
                       child: vm.sendMode == SendMode.multiple
@@ -232,12 +302,14 @@ class SendTab extends StatelessWidget {
                     ),
                   );
                 }),
+
                 const SizedBox(height: 10),
                 Center(
                   child: TextButton(
                     onPressed: () async {
                       await context.push(() => const TroubleshootPage());
                     },
+                    style: TextButton.styleFrom(foregroundColor: kAccentCyan.withOpacity(0.7)),
                     child: Text(t.troubleshootPage.title),
                   ),
                 ),
@@ -253,13 +325,13 @@ class SendTab extends StatelessWidget {
                         children: [
                           Text(
                             t.sendTab.help,
-                            style: const TextStyle(color: Colors.grey),
+                            style: TextStyle(color: Colors.white.withOpacity(0.3)),
                             textAlign: TextAlign.center,
                           ),
                           if (checkPlatformCanReceiveShareIntent())
                             Text(
                               t.sendTab.shareIntentInfo,
-                              style: const TextStyle(color: Colors.grey),
+                              style: TextStyle(color: Colors.white.withOpacity(0.3)),
                               textAlign: TextAlign.center,
                             ),
                         ],
@@ -270,13 +342,9 @@ class SendTab extends StatelessWidget {
                 const SizedBox(height: 50),
               ],
             ),
-            // make the top draggable on Desktop
             checkPlatform([TargetPlatform.macOS])
                 ? SizedBox(height: 50, child: MoveWindow())
-                : SizedBox(
-                    height: 0,
-                    width: 0,
-                  ),
+                : const SizedBox(height: 0, width: 0),
           ],
         );
       },
@@ -284,8 +352,124 @@ class SendTab extends StatelessWidget {
   }
 }
 
+/// Glassmorphic filter tab strip for LocalSend / All Network.
+class _DeviceFilterTabs extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+
+  const _DeviceFilterTabs({
+    required this.selectedIndex,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['LocalSend', 'All Network'];
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: kGlassFill,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: kGlassBorder, width: 1),
+          ),
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            children: List.generate(labels.length, (i) {
+              final isSelected = i == selectedIndex;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onChanged(i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeInOut,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(9),
+                      gradient: isSelected
+                          ? const LinearGradient(
+                              colors: [kAccentCyan, kAccentPurple],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            )
+                          : null,
+                      color: isSelected ? null : Colors.transparent,
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: kAccentCyan.withOpacity(0.25),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Center(
+                      child: Text(
+                        labels[i],
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white.withOpacity(0.45),
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                          fontSize: 13,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A neon-styled elevated button for "Add files".
+class _NeonButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  final IconData icon;
+  final String label;
+
+  const _NeonButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: const LinearGradient(
+          colors: [kAccentCyan, kAccentPurple],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(color: kAccentCyan.withOpacity(0.35), blurRadius: 14, spreadRadius: 1),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+      ),
+    );
+  }
+}
+
 /// A button that opens a popup menu to select [T].
-/// This is used for the scan button and the send mode button.
 class _CircularPopupButton<T> extends StatelessWidget {
   final String tooltip;
   final PopupMenuItemBuilder<T> itemBuilder;
@@ -308,13 +492,14 @@ class _CircularPopupButton<T> extends StatelessWidget {
         type: MaterialType.transparency,
         child: DividerTheme(
           data: DividerThemeData(
-            color: Theme.of(context).brightness == Brightness.light ? Colors.teal.shade100 : Colors.grey.shade700,
+            color: kGlassBorder,
           ),
           child: PopupMenuButton(
             offset: const Offset(0, 40),
             onSelected: onSelected,
             tooltip: tooltip,
             itemBuilder: itemBuilder,
+            color: kSurface,
             child: child,
           ),
         ),
@@ -323,21 +508,19 @@ class _CircularPopupButton<T> extends StatelessWidget {
   }
 }
 
-/// The scan button that uses [_CircularPopupButton].
 class _ScanButton extends StatelessWidget {
   final List<String> ips;
 
-  const _ScanButton({
-    required this.ips,
-  });
+  const _ScanButton({required this.ips});
 
   @override
   Widget build(BuildContext context) {
-    final (scanningFavorites, scanningIps) = context.ref.watch(nearbyDevicesProvider.select((s) => (s.runningFavoriteScan, s.runningIps)));
+    final (scanningFavorites, scanningIps) =
+        context.ref.watch(nearbyDevicesProvider.select((s) => (s.runningFavoriteScan, s.runningIps)));
     final animations = context.ref.watch(animationProvider);
 
     final spinning = (scanningFavorites || scanningIps.isNotEmpty) && animations;
-    final iconColor = !animations && scanningIps.isNotEmpty ? Theme.of(context).colorScheme.warning : null;
+    final iconColor = !animations && scanningIps.isNotEmpty ? Theme.of(context).colorScheme.warning : kAccentCyan;
 
     if (ips.length <= StartSmartScan.maxInterfaces) {
       return Tooltip(
@@ -374,7 +557,7 @@ class _ScanButton extends StatelessWidget {
                 children: [
                   _RotatingSyncIcon(ip),
                   const SizedBox(width: 10),
-                  Text(ip),
+                  Text(ip, style: const TextStyle(color: Colors.white)),
                 ],
               ),
             ),
@@ -394,7 +577,6 @@ class _ScanButton extends StatelessWidget {
   }
 }
 
-/// A separate widget, so it gets the latest data from provider.
 class _RotatingSyncIcon extends StatelessWidget {
   final String ip;
 
@@ -407,7 +589,7 @@ class _RotatingSyncIcon extends StatelessWidget {
       duration: const Duration(seconds: 2),
       spinning: scanningIps.contains(ip),
       reverse: true,
-      child: const Icon(Icons.sync),
+      child: const Icon(Icons.sync, color: kAccentCyan),
     );
   }
 }
@@ -451,12 +633,12 @@ class _SendModeButton extends StatelessWidget {
                     maintainSize: true,
                     maintainAnimation: true,
                     maintainState: true,
-                    child: const Icon(Icons.check_circle),
+                    child: const Icon(Icons.check_circle, color: kAccentCyan),
                   );
                 },
               ),
               const SizedBox(width: 10),
-              Text(t.sendTab.sendModes.single),
+              Text(t.sendTab.sendModes.single, style: const TextStyle(color: Colors.white)),
             ],
           ),
         ),
@@ -473,12 +655,12 @@ class _SendModeButton extends StatelessWidget {
                     maintainSize: true,
                     maintainAnimation: true,
                     maintainState: true,
-                    child: const Icon(Icons.check_circle),
+                    child: const Icon(Icons.check_circle, color: kAccentCyan),
                   );
                 },
               ),
               const SizedBox(width: 10),
-              Text(t.sendTab.sendModes.multiple),
+              Text(t.sendTab.sendModes.multiple, style: const TextStyle(color: Colors.white)),
             ],
           ),
         ),
@@ -492,10 +674,10 @@ class _SendModeButton extends StatelessWidget {
                 maintainSize: true,
                 maintainAnimation: true,
                 maintainState: true,
-                child: Icon(Icons.check_circle),
+                child: Icon(Icons.check_circle, color: kAccentCyan),
               ),
               const SizedBox(width: 10),
-              Text(t.sendTab.sendModes.link),
+              Text(t.sendTab.sendModes.link, style: const TextStyle(color: Colors.white)),
             ],
           ),
         ),
@@ -507,10 +689,10 @@ class _SendModeButton extends StatelessWidget {
             children: [
               const Directionality(
                 textDirection: TextDirection.ltr,
-                child: Icon(Icons.help),
+                child: Icon(Icons.help, color: kAccentPurple),
               ),
               const SizedBox(width: 10),
-              Text(t.sendTab.sendModeHelp),
+              Text(t.sendTab.sendModeHelp, style: const TextStyle(color: Colors.white)),
             ],
           ),
         ),
@@ -547,7 +729,9 @@ class _MultiSendDeviceListTile extends StatelessWidget {
       final progressNotifier = ref.watch(progressProvider);
       final currBytes = files.fold<int>(
         0,
-        (prev, curr) => prev + ((progressNotifier.getProgress(sessionId: session.sessionId, fileId: curr.file.id) * curr.file.size).round()),
+        (prev, curr) =>
+            prev +
+            ((progressNotifier.getProgress(sessionId: session.sessionId, fileId: curr.file.id) * curr.file.size).round()),
       );
       final totalBytes = files.fold<int>(0, (prev, curr) => prev + curr.file.size);
       progress = totalBytes == 0 ? 0 : currBytes / totalBytes;
