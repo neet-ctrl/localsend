@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/native/cmd_helper.dart';
@@ -20,11 +22,16 @@ class TroubleshootPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.ref.watch(settingsProvider);
     return Scaffold(
+      backgroundColor: kBgDark,
       appBar: basicLocalSendAppbar(t.troubleshootPage.title),
       body: ResponsiveListView(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 30),
         children: [
-          Text(t.troubleshootPage.subTitle, textAlign: TextAlign.center),
+          Text(
+            t.troubleshootPage.subTitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 14),
+          ),
           const SizedBox(height: 5),
           _TroubleshootItem(
             symptomText: t.troubleshootPage.firewall.symptom,
@@ -44,10 +51,7 @@ class TroubleshootPage extends StatelessWidget {
             secondaryButton: _FixButton(
               label: t.troubleshootPage.firewall.openFirewall,
               onTapMap: {
-                TargetPlatform.windows: _CommandFixAction(
-                  adminPrivileges: false,
-                  commands: ['wf'],
-                ),
+                TargetPlatform.windows: _CommandFixAction(adminPrivileges: false, commands: ['wf']),
                 TargetPlatform.macOS: _NativeFixAction(() => macos_channel.openFirewallSettings()),
               },
             ),
@@ -90,56 +94,116 @@ class _TroubleshootItemState extends State<_TroubleshootItem> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 15),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.symptomText, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
-              Text(t.troubleshootPage.solution),
-              Text(widget.solutionText),
-              if (widget.primaryButton != null) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  runSpacing: 10,
-                  children: [
-                    widget.primaryButton!,
-                    if (widget.secondaryButton != null) ...[
-                      const SizedBox(width: 10),
-                      widget.secondaryButton!,
-                    ],
-                    if (widget.primaryButton!.onTap?.commands != null) ...[
-                      const SizedBox(width: 10),
-                      CustomIconButton(
-                        onPressed: () {
-                          setState(() => _showCommands = !_showCommands);
-                        },
-                        child: const Icon(Icons.info),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: kGlassFill,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: kGlassBorder, width: 1),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Symptom with neon left border accent
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 20,
+                        margin: const EdgeInsets.only(right: 10, top: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          gradient: const LinearGradient(
+                            colors: [kAccentCyan, kAccentPurple],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          widget.symptomText,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
                       ),
                     ],
-                  ],
-                ),
-                AnimatedCrossFade(
-                  crossFadeState: _showCommands ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                  duration: const Duration(milliseconds: 200),
-                  firstChild: Container(),
-                  secondChild: SelectionArea(
-                    child: Column(
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    t.troubleshootPage.solution,
+                    style: TextStyle(color: kAccentCyan.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.solutionText,
+                    style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
+                  ),
+                  if (widget.primaryButton != null) ...[
+                    const SizedBox(height: 14),
+                    Wrap(
+                      runSpacing: 10,
+                      spacing: 10,
                       children: [
-                        ...?widget.primaryButton?.onTap?.commands?.map((cmd) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Text(cmd, style: const TextStyle(fontFamily: 'RobotoMono')),
-                          );
-                        }),
+                        widget.primaryButton!,
+                        if (widget.secondaryButton != null) widget.secondaryButton!,
+                        if (widget.primaryButton!.onTap?.commands != null)
+                          CustomIconButton(
+                            onPressed: () => setState(() => _showCommands = !_showCommands),
+                            child: Icon(
+                              Icons.terminal,
+                              color: _showCommands ? kAccentCyan : Colors.white.withOpacity(0.45),
+                            ),
+                          ),
                       ],
                     ),
-                  ),
-                ),
-              ],
-            ],
+                    AnimatedCrossFade(
+                      crossFadeState: _showCommands ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                      duration: const Duration(milliseconds: 200),
+                      firstChild: Container(),
+                      secondChild: SelectionArea(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: kBgDark.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: kAccentCyan.withOpacity(0.2), width: 1),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ...?widget.primaryButton?.onTap?.commands?.map((cmd) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Text(
+                                    cmd,
+                                    style: const TextStyle(
+                                      fontFamily: 'RobotoMono',
+                                      color: kAccentCyan,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -159,42 +223,47 @@ class _FixButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: const LinearGradient(colors: [kAccentCyan, kAccentPurple]),
+        boxShadow: [BoxShadow(color: kAccentCyan.withOpacity(0.3), blurRadius: 12)],
       ),
-      onPressed: () async {
-        if (onTap != null) {
-          onTap!.runFix();
-        } else {
-          await showDialog(
-            context: context,
-            builder: (_) => NotAvailableOnPlatformDialog(platforms: onTapMap.keys.toList()),
-          );
-        }
-      },
-      child: Text(label),
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        ),
+        onPressed: () async {
+          if (onTap != null) {
+            onTap!.runFix();
+          } else {
+            await showDialog(
+              context: context,
+              builder: (_) => NotAvailableOnPlatformDialog(platforms: onTapMap.keys.toList()),
+            );
+          }
+        },
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
     );
   }
 }
 
 abstract class _FixAction {
   void runFix();
-
   List<String>? get commands;
 }
 
 class _CommandFixAction extends _FixAction {
   final bool adminPrivileges;
-
   @override
   final List<String> commands;
 
-  _CommandFixAction({
-    required this.adminPrivileges,
-    required this.commands,
-  });
+  _CommandFixAction({required this.adminPrivileges, required this.commands});
 
   @override
   void runFix() async {
@@ -214,14 +283,11 @@ class _CommandFixAction extends _FixAction {
 
 class _NativeFixAction extends _FixAction {
   final Future<void> Function() action;
-
   _NativeFixAction(this.action);
 
   @override
   List<String>? get commands => null;
 
   @override
-  void runFix() async {
-    await action();
-  }
+  void runFix() async => await action();
 }

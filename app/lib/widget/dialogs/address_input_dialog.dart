@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:collection/collection.dart';
 import 'package:common/model/device.dart';
@@ -56,9 +57,7 @@ class _AddressInputDialogState extends State<AddressInputDialog> with Refena {
       candidates = localIps.map((ip) => '${ip.ipPrefix}.$input').toList();
     }
 
-    setState(() {
-      _fetching = true;
-    });
+    setState(() => _fetching = true);
 
     final https = ref.read(settingsProvider).https;
 
@@ -72,15 +71,12 @@ class _AddressInputDialogState extends State<AddressInputDialog> with Refena {
       for (final ip in candidates)
         () async {
           try {
-            final response = await ref
-                .read(httpProvider)
-                .v2
-                .register(
-                  protocol: https ? ProtocolType.https : ProtocolType.http,
-                  ip: ip,
-                  port: port,
-                  payload: payload,
-                );
+            final response = await ref.read(httpProvider).v2.register(
+              protocol: https ? ProtocolType.https : ProtocolType.http,
+              ip: ip,
+              port: port,
+              payload: payload,
+            );
 
             foundDevice = response.body.toDevice(ip, port, https, HttpDiscovery(ip: ip));
             deviceCompleter.complete();
@@ -91,19 +87,11 @@ class _AddressInputDialogState extends State<AddressInputDialog> with Refena {
         }(),
     ];
 
-    // Wait until,
-    // - a device is found
-    // - all candidates are checked
     try {
-      await Future.any([
-        deviceCompleter.future,
-        Future.wait(futures),
-      ]);
+      await Future.any([deviceCompleter.future, Future.wait(futures)]);
     } catch (_) {}
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (foundDevice != null) {
       ref.redux(lastDevicesProvider).dispatch(AddLastDeviceAction(foundDevice!));
@@ -122,131 +110,212 @@ class _AddressInputDialogState extends State<AddressInputDialog> with Refena {
     final settings = ref.watch(settingsProvider);
     final lastDevices = ref.watch(lastDevicesProvider);
 
-    return AlertDialog(
-      title: Text(t.dialogs.addressInput.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ToggleButtons(
-            isSelected: _selected,
-            onPressed: (int index) {
-              setState(() {
-                for (int i = 0; i < _selected.length; i++) {
-                  _selected[i] = i == index;
-                }
-                _mode = _InputMode.values[index];
-              });
-            },
-            borderRadius: BorderRadius.circular(10),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-            children: _InputMode.values.map((mode) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                child: Text(mode.label),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 15),
-          TextFormField(
-            key: ValueKey('input-$_mode'),
-            autofocus: true,
-            enabled: !_fetching,
-            keyboardType: _mode == _InputMode.hashtag ? TextInputType.number : TextInputType.text,
-            decoration: InputDecoration(
-              prefixText: _mode == _InputMode.hashtag ? '# ' : 'IP: ',
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            decoration: BoxDecoration(
+              color: kSurface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: kGlassBorder, width: 1),
             ),
-            onChanged: (s) {
-              setState(() => _input = s);
-            },
-            onFieldSubmitted: (s) async => _submit(localIps, settings.port),
-          ),
-          const SizedBox(height: 10),
-          if (_mode == _InputMode.hashtag) ...[
-            Text(
-              '${t.general.example}: 123',
-              style: const TextStyle(color: Colors.grey),
-            ),
-            if (localIps.length <= 1)
-              Text(
-                '${t.dialogs.addressInput.ip}: ${localIps.firstOrNull?.ipPrefix ?? '192.168.2'}.$_input',
-                style: const TextStyle(color: Colors.grey),
-              )
-            else ...[
-              Text(
-                '${t.dialogs.addressInput.ip}:',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              for (final ip in localIps)
-                Text(
-                  '- ${ip.ipPrefix}.$_input',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-            ],
-          ] else ...[
-            if (lastDevices.isEmpty)
-              Text(
-                '${t.general.example}: ${localIps.firstOrNull?.ipPrefix ?? '192.168.2'}.123',
-                style: const TextStyle(color: Colors.grey),
-              )
-            else
-              Text.rich(
-                TextSpan(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    TextSpan(text: t.dialogs.addressInput.recentlyUsed),
-                    ...lastDevices
-                        .mapIndexed((index, device) {
-                          return [
-                            if (index != 0) const TextSpan(text: ', '),
-                            TextSpan(
-                              text: device.ip,
-                              style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                              recognizer: TapGestureRecognizer()..onTap = () async => _submit(localIps, settings.port, device.ip),
-                            ),
-                          ];
-                        })
-                        .expand((e) => e),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        gradient: const LinearGradient(colors: [kAccentCyan, kAccentPurple]),
+                      ),
+                      child: const Icon(Icons.wifi_find, color: Colors.white, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      t.dialogs.addressInput.title,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
                   ],
                 ),
-              ),
-          ],
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Row(
-                children: [
-                  Text(t.general.error, style: TextStyle(color: Theme.of(context).colorScheme.warning)),
-                  if (_error != null) ...[
-                    const SizedBox(width: 5),
-                    InkWell(
-                      onTap: () async {
-                        await showDialog(
-                          context: context,
-                          builder: (_) => ErrorDialog(error: _error!),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 5),
-                        child: Icon(Icons.info, color: Theme.of(context).colorScheme.warning, size: 20),
+                const SizedBox(height: 20),
+
+                // Mode toggle
+                Container(
+                  decoration: BoxDecoration(
+                    color: kGlassFill,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: kGlassBorder, width: 1),
+                  ),
+                  child: Row(
+                    children: _InputMode.values.mapIndexed((i, mode) {
+                      final isSelected = _selected[i];
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              for (int j = 0; j < _selected.length; j++) {
+                                _selected[j] = j == i;
+                              }
+                              _mode = _InputMode.values[i];
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(11),
+                              gradient: isSelected
+                                  ? const LinearGradient(colors: [kAccentCyan, kAccentPurple])
+                                  : null,
+                            ),
+                            child: Text(
+                              mode.label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.white.withOpacity(0.4),
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  key: ValueKey('input-$_mode'),
+                  autofocus: true,
+                  enabled: !_fetching,
+                  style: const TextStyle(color: Colors.white),
+                  cursorColor: kAccentCyan,
+                  keyboardType: _mode == _InputMode.hashtag ? TextInputType.number : TextInputType.text,
+                  decoration: InputDecoration(
+                    prefixText: _mode == _InputMode.hashtag ? '# ' : 'IP: ',
+                    prefixStyle: TextStyle(color: kAccentCyan.withOpacity(0.7)),
+                    hintText: _mode == _InputMode.hashtag ? '123' : '${localIps.firstOrNull?.ipPrefix ?? '192.168.2'}.123',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
+                  ),
+                  onChanged: (s) => setState(() => _input = s),
+                  onFieldSubmitted: (s) async => _submit(localIps, settings.port),
+                ),
+
+                const SizedBox(height: 10),
+
+                if (_mode == _InputMode.hashtag) ...[
+                  Text(
+                    '${t.general.example}: 123',
+                    style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12),
+                  ),
+                  if (localIps.length <= 1)
+                    Text(
+                      '${t.dialogs.addressInput.ip}: ${localIps.firstOrNull?.ipPrefix ?? '192.168.2'}.$_input',
+                      style: TextStyle(color: kAccentCyan.withOpacity(0.5), fontSize: 12, fontFamily: 'RobotoMono'),
+                    )
+                  else ...[
+                    Text('${t.dialogs.addressInput.ip}:', style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12)),
+                    for (final ip in localIps)
+                      Text('- ${ip.ipPrefix}.$_input', style: TextStyle(color: kAccentCyan.withOpacity(0.5), fontSize: 12, fontFamily: 'RobotoMono')),
+                  ],
+                ] else ...[
+                  if (lastDevices.isEmpty)
+                    Text(
+                      '${t.general.example}: ${localIps.firstOrNull?.ipPrefix ?? '192.168.2'}.123',
+                      style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12),
+                    )
+                  else
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: t.dialogs.addressInput.recentlyUsed,
+                            style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12),
+                          ),
+                          ...lastDevices.mapIndexed((index, device) {
+                            return [
+                              if (index != 0) TextSpan(text: ', ', style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12)),
+                              TextSpan(
+                                text: device.ip,
+                                style: const TextStyle(color: kAccentCyan, fontSize: 12, fontFamily: 'RobotoMono'),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () async => _submit(localIps, settings.port, device.ip),
+                              ),
+                            ];
+                          }).expand((e) => e),
+                        ],
+                      ),
+                    ),
+                ],
+
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Row(
+                      children: [
+                        Text(t.general.error, style: const TextStyle(color: Colors.orangeAccent, fontSize: 13)),
+                        const SizedBox(width: 5),
+                        InkWell(
+                          onTap: () async {
+                            await showDialog(context: context, builder: (_) => ErrorDialog(error: _error!));
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 5),
+                            child: Icon(Icons.info, color: Colors.orangeAccent, size: 18),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: Colors.white.withOpacity(0.55)),
+                      onPressed: () => context.pop(),
+                      child: Text(t.general.cancel),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        gradient: const LinearGradient(colors: [kAccentCyan, kAccentPurple]),
+                        boxShadow: [BoxShadow(color: kAccentCyan.withOpacity(0.3), blurRadius: 12)],
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        ),
+                        onPressed: _fetching ? null : () async => _submit(localIps, settings.port),
+                        child: _fetching
+                            ? const SizedBox(
+                                width: 18, height: 18,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(t.general.confirm, style: const TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ),
                   ],
-                ],
-              ),
+                ),
+              ],
             ),
-        ],
+          ),
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => context.pop(),
-          child: Text(t.general.cancel),
-        ),
-        FilledButton(
-          onPressed: _fetching ? null : () async => _submit(localIps, settings.port),
-          child: Text(t.general.confirm),
-        ),
-      ],
     );
   }
 }

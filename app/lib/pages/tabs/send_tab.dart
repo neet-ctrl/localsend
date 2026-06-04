@@ -520,7 +520,7 @@ class _ScanButton extends StatelessWidget {
     final animations = context.ref.watch(animationProvider);
 
     final spinning = (scanningFavorites || scanningIps.isNotEmpty) && animations;
-    final iconColor = !animations && scanningIps.isNotEmpty ? Theme.of(context).colorScheme.warning : kAccentCyan;
+    final iconColor = !animations && scanningIps.isNotEmpty ? Colors.orangeAccent : kAccentCyan;
 
     if (ips.length <= StartSmartScan.maxInterfaces) {
       return Tooltip(

@@ -1,0 +1,1 @@
+- [LocalSend Glassmorphic Design System](localsend-design.md) — deep navy/neon glassmorphic redesign; every page, dialog, and widget rewritten; all legacy AlertDialog/colorScheme.warning patterns removed.
