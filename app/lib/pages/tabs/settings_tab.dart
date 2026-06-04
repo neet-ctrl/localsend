@@ -811,3 +811,18 @@ extension on ThemeMode {
     }
   }
 }
+
+extension on ColorMode {
+  String get humanName {
+    switch (this) {
+      case ColorMode.system:
+        return t.settingsTab.general.colorOptions.system;
+      case ColorMode.localsend:
+        return 'LocalSend';
+      case ColorMode.oled:
+        return t.settingsTab.general.colorOptions.oled;
+      case ColorMode.yaru:
+        return 'Yaru';
+    }
+  }
+}

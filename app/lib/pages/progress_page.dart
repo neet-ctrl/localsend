@@ -586,3 +586,60 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
     );
   }
 }
+
+extension on FileStatus {
+  String get label {
+    switch (this) {
+      case FileStatus.queue:
+        return t.general.queue;
+      case FileStatus.skipped:
+        return t.general.skipped;
+      case FileStatus.sending:
+        return t.progressPage.titleSending;
+      case FileStatus.failed:
+        return t.general.error;
+      case FileStatus.finished:
+        return t.general.finished;
+    }
+  }
+
+  Color getColor(BuildContext context) {
+    switch (this) {
+      case FileStatus.queue:
+        return Colors.grey;
+      case FileStatus.skipped:
+        return Colors.grey;
+      case FileStatus.sending:
+        return Theme.of(context).colorScheme.primary;
+      case FileStatus.failed:
+        return Colors.red;
+      case FileStatus.finished:
+        return Colors.green;
+    }
+  }
+}
+
+extension on SessionStatus {
+  String getLabel({required String remainingTime}) {
+    switch (this) {
+      case SessionStatus.sending:
+        return t.progressPage.total.title.sending(time: remainingTime);
+      case SessionStatus.finished:
+        return t.general.finished;
+      case SessionStatus.finishedWithErrors:
+        return t.progressPage.total.title.finishedError;
+      case SessionStatus.canceledBySender:
+        return t.progressPage.total.title.canceledSender;
+      case SessionStatus.canceledByReceiver:
+        return t.progressPage.total.title.canceledReceiver;
+      case SessionStatus.waiting:
+        return t.sendPage.waiting;
+      case SessionStatus.recipientBusy:
+        return t.sendPage.busy;
+      case SessionStatus.declined:
+        return t.sendPage.rejected;
+      case SessionStatus.tooManyAttempts:
+        return t.sendPage.tooManyAttempts;
+    }
+  }
+}
