@@ -41,8 +41,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            app/rust_builder/target
-          key: cargo-android-arm64-${{ hashFiles('app/rust_builder/Cargo.lock') }}
+            app/rust/target
+          key: cargo-android-arm64-${{ hashFiles('app/rust/Cargo.lock') }}
           restore-keys: cargo-android-arm64-
 
       - name: Flutter pub get
