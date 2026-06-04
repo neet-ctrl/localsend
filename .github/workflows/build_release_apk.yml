@@ -1,0 +1,182 @@
+name: Build Release APK (arm64-v8a)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FLUTTER_VERSION: "3.35.6"
+  KEY_ALIAS: my-key
+  KEY_PASSWORD: Sh@090609
+  STORE_PASSWORD: Sh@090609
+  # Base64-encoded my-release-key.jks (hardcoded)
+  KEYSTORE_BASE64: |
+    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
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/rust/target
+          key: cargo-android-arm64-${{ hashFiles('app/rust/Cargo.lock') }}
+          restore-keys: cargo-android-arm64-
+
+      - name: Decode & place keystore
+        run: |
+          echo "${{ env.KEYSTORE_BASE64 }}" | tr -d ' \n' | base64 --decode > ${{ github.workspace }}/my-release-key.jks
+
+      - name: Flutter pub get
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build release APK (arm64-v8a only)
+        working-directory: app
+        run: |
+          flutter build apk --release --target-platform android-arm64 \
+            --dart-define=FLUTTER_BUILD_NAME=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1) \
+            --dart-define=FLUTTER_BUILD_NUMBER=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f2)
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-release-key.jks
+          KEY_ALIAS: ${{ env.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ env.STORE_PASSWORD }}
+
+      - name: Sign APK
+        id: sign
+        uses: kevin-david/zipalign-sign-android-release@v2
+        with:
+          releaseDirectory: app/build/app/outputs/flutter-apk
+          signingKeyBase64: ${{ env.KEYSTORE_BASE64 }}
+          keyStorePassword: ${{ env.STORE_PASSWORD }}
+          keyAlias: ${{ env.KEY_ALIAS }}
+          keyPassword: ${{ env.KEY_PASSWORD }}
+
+      - name: Rename signed APK
+        run: |
+          cp "${{ steps.sign.outputs.signedReleaseFile }}" \
+             app/build/app/outputs/flutter-apk/app-arm64-v8a-release-signed.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-arm64-v8a
+          path: app/build/app/outputs/flutter-apk/app-arm64-v8a-release-signed.apk
+          retention-days: 30
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' app/pubspec.yaml | awk '{print $2}' | tr -d "'\"")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Use git tag if triggered by tag push, otherwise generate one
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="release-v${VERSION}-${{ github.run_number }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Release v${{ steps.version.outputs.version }}"
+          body: |
+            ## Release APK — arm64-v8a
+
+            **Version:** `${{ steps.version.outputs.version }}`
+            **Branch:** `${{ github.ref_name }}`
+            **Commit:** `${{ github.sha }}`
+            **Run:** #${{ github.run_number }}
+
+            ### Changes
+            ${{ github.event.head_commit.message }}
+
+            ---
+            ### Installation
+            1. Download the APK below
+            2. Enable "Install from unknown sources" on your device
+            3. Open the APK to install
+
+            > ✅ This is a **signed release** build ready for distribution.
+          files: app/build/app/outputs/flutter-apk/app-arm64-v8a-release-signed.apk
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

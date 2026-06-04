@@ -53,9 +53,38 @@ jobs:
         working-directory: app
         run: flutter build apk --debug --target-platform android-arm64
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: debug-arm64-v8a
           path: app/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
           retention-days: 7
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' app/pubspec.yaml | awk '{print $2}' | tr -d "'\"")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=debug-v${VERSION}-${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Debug Build v${{ steps.version.outputs.version }} (#${{ github.run_number }})"
+          body: |
+            ## Debug APK — arm64-v8a
+
+            **Branch:** `${{ github.ref_name }}`
+            **Commit:** `${{ github.sha }}`
+            **Run:** #${{ github.run_number }}
+
+            ### Changes
+            ${{ github.event.head_commit.message }}
+
+            ---
+            > ⚠️ This is a **debug** build intended for testing only.
+          files: app/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
