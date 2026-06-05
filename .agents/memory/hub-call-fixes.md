@@ -42,6 +42,15 @@ Also: the "End Call" button in hub_voice_call_page called BOTH `context.pop()` A
 **Root cause**: Same as voice call (Bug 2). The End button in `hub_video_call_page.dart` called `callNotifier.endCall(); context.pop()` while `build()` also popped on `ended` state.  
 **Fix**: Removed `context.pop()` from End button; state-based pop handles navigation.
 
+## Bug 8 (CRITICAL) — onTrack empty streams → no remote audio/video
+**Root cause**: `flutter_webrtc` frequently fires `onTrack` with `event.streams` empty; the actual track is in `event.track` only. The old code did `if (event.streams.isNotEmpty)` → skipped entirely → renderer never got a source → other phone shows black/silence.  
+**Fix**: Pre-create `_remoteStream = await createLocalMediaStream(...)` in both `startCall` and `acceptCall` BEFORE `_createPeerConnection`. In `onTrack`: if streams present use first, else add `event.track` to `_remoteStream` and set renderer. Also disposes `_remoteStream` in `_cleanup`.  
+**Rule**: Always pre-create a remote stream container; never rely solely on `event.streams.isNotEmpty`.
+
+## Bug 9 — toggleVideo is a no-op (double negation cancels out)
+**Root cause**: `final disabled = !state.isVideoEnabled` then `t.enabled = !disabled` → the two negations cancel → track state never changes.  
+**Fix**: `final nowEnabled = !state.isVideoEnabled; t.enabled = nowEnabled;` — single clean flip.
+
 ## Bug 7 — No chat message notifications
 **Root cause**: No system notification was fired when new Hub messages arrived. Only an in-app banner was shown (home_page.dart), invisible when backgrounded.  
 **Fix**: `hub_chat_provider.dart` poll loop calls `_showChatNotification(senderAlias, content, type)` for each genuinely new message. `MainActivity.kt` handles `showChatNotification` MethodChannel call and fires a per-sender heads-up notification (IMPORTANCE_HIGH, `CATEGORY_MESSAGE`). Notification IDs are unique per sender name so messages from different people don't overwrite each other.

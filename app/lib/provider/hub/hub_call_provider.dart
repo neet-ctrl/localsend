@@ -28,6 +28,9 @@ final hubCallProvider = NotifierProvider<HubCallNotifier, HubCallState>(
 class HubCallNotifier extends Notifier<HubCallState> {
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
+  // Pre-created empty stream used as a container for remote tracks that
+  // arrive via onTrack with no stream attached (common in flutter_webrtc).
+  MediaStream? _remoteStream;
   Timer? _pollTimer;
 
   // Guard against reentrant endCall() calls (e.g. triggered by onConnectionState
@@ -280,6 +283,11 @@ class HubCallNotifier extends Notifier<HubCallState> {
       await _initRenderers();
       _remoteDescSet = false;
       _pendingCandidates.clear();
+      // Pre-create the remote stream container BEFORE creating the peer
+      // connection so the onTrack handler can add tracks to it immediately,
+      // even when flutter_webrtc fires onTrack with no stream attached.
+      _remoteStream = await createLocalMediaStream(
+          'remote_${DateTime.now().millisecondsSinceEpoch}');
       _peerConnection = await _createPeerConnection(device);
 
       final constraints = <String, dynamic>{
@@ -353,6 +361,10 @@ class HubCallNotifier extends Notifier<HubCallState> {
       await _initRenderers();
       _remoteDescSet = false;
       _pendingCandidates.clear();
+      // Pre-create the remote stream container BEFORE creating the peer
+      // connection so the onTrack handler can add tracks to it immediately.
+      _remoteStream = await createLocalMediaStream(
+          'remote_${DateTime.now().millisecondsSinceEpoch}');
       _peerConnection = await _createPeerConnection(device);
 
       final type = state.type ?? HubCallType.voice;
@@ -456,10 +468,10 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   void toggleVideo() {
-    final disabled = !state.isVideoEnabled;
-    _localStream?.getVideoTracks().forEach((t) => t.enabled = !disabled);
-    state = state.copyWith(isVideoEnabled: !disabled);
-    _log.info(HubLogCategory.calls, 'Video enabled: ${!disabled}');
+    final nowEnabled = !state.isVideoEnabled;
+    _localStream?.getVideoTracks().forEach((t) => t.enabled = nowEnabled);
+    state = state.copyWith(isVideoEnabled: nowEnabled);
+    _log.info(HubLogCategory.calls, 'Video enabled: $nowEnabled');
   }
 
   void toggleHold() {
@@ -529,15 +541,32 @@ class HubCallNotifier extends Notifier<HubCallState> {
     };
 
     pc.onTrack = (event) {
+      // flutter_webrtc frequently fires onTrack with event.streams EMPTY —
+      // the track is in event.track but no stream wraps it.  We pre-create
+      // _remoteStream in startCall/acceptCall and add every arriving track
+      // into it unconditionally so the renderer always gets a source.
+      _log.info(HubLogCategory.calls,
+          'onTrack: kind=${event.track.kind} streams=${event.streams.length}');
+
       if (event.streams.isNotEmpty) {
-        _log.info(HubLogCategory.calls, 'Remote track received (${event.track.kind})');
-        remoteRenderer.srcObject = event.streams.first;
-        state = state.copyWith(
-          status: HubCallStatus.active,
-          startTime: state.startTime ?? DateTime.now(),
-          hasRemoteTrack: true,
-        );
+        // Happy path: stream already attached — use it directly.
+        _remoteStream = event.streams.first;
+        remoteRenderer.srcObject = _remoteStream;
+      } else if (_remoteStream != null) {
+        // Common path: no stream — add track to our pre-created container.
+        _remoteStream!.addTrack(event.track);
+        remoteRenderer.srcObject = _remoteStream;
+      } else {
+        // Defensive: _remoteStream not yet ready — nothing to do; it will be
+        // assigned by the next track event or set externally.
+        _log.warn(HubLogCategory.calls, 'onTrack: _remoteStream is null — track dropped!');
       }
+
+      state = state.copyWith(
+        status: HubCallStatus.active,
+        startTime: state.startTime ?? DateTime.now(),
+        hasRemoteTrack: true,
+      );
     };
 
     pc.onConnectionState = (connectionState) {
@@ -580,6 +609,13 @@ class HubCallNotifier extends Notifier<HubCallState> {
     _localStream?.getTracks().forEach((t) => t.stop());
     _localStream?.dispose();
     _localStream = null;
+
+    // Dispose the remote stream container
+    try {
+      _remoteStream?.getTracks().forEach((t) => t.stop());
+      _remoteStream?.dispose();
+    } catch (_) {}
+    _remoteStream = null;
 
     // Null out the peer connection BEFORE closing it.
     // This prevents the onConnectionState callback from firing and
