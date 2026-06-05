@@ -63,25 +63,10 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
 
   @override
   Widget build(BuildContext context) {
-    final vm = context.watch(
-      widget.vm,
-      listener: (prev, next) {
-        if (prev.status != next.status) {
-          // ignore: discarded_futures
-          TaskbarHelper.visualizeStatus(next.status);
-        }
-      },
-    );
-
-    if (vm.status == null && vm.message == null) {
-      return const Scaffold(
-        body: SizedBox(),
-      );
-    }
-
-    final senderFavoriteEntry = ref.watch(favoritesProvider.select((state) => state.findDevice(vm.sender)));
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    // ViewModelBuilder MUST wrap everything — onFirstFrame calls setFiles()
+    // which registers files with the server before any upload attempt.
+    // Never put an early-return above ViewModelBuilder or setFiles() won't be
+    // called in time and the server returns 400 on upload.
     return ViewModelBuilder(
       provider: (ref) => widget.vm,
       onFirstFrame: (context, vm) {
@@ -91,7 +76,20 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
         ref.dispose(widget.vm);
         unawaited(TaskbarHelper.clearProgressBar());
       },
+      listener: (ref, prev, next) {
+        if (prev.status != next.status) {
+          unawaited(TaskbarHelper.visualizeStatus(next.status));
+        }
+      },
       builder: (context, vm) {
+        // Early return INSIDE the builder — ViewModelBuilder stays alive
+        if (vm.status == null && vm.message == null) {
+          return const Scaffold(body: SizedBox());
+        }
+
+        final senderFavoriteEntry = ref.watch(favoritesProvider.select((state) => state.findDevice(vm.sender)));
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
         return PopScope(
           onPopInvokedWithResult: (didPop, result) {
             if (didPop) {
@@ -102,7 +100,6 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
           child: Scaffold(
             body: Stack(
               children: [
-                // Glassmorphic gradient background
                 if (isDark)
                   Positioned.fill(
                     child: DecoratedBox(
@@ -211,9 +208,7 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
                                                   child: SingleChildScrollView(
                                                     child: Padding(
                                                       padding: const EdgeInsets.all(10),
-                                                      child: SelectableText(
-                                                        vm.message!,
-                                                      ),
+                                                      child: SelectableText(vm.message!),
                                                     ),
                                                   ),
                                                 ),
@@ -225,9 +220,7 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
                                               children: [
                                                 ElevatedButton(
                                                   onPressed: () {
-                                                    unawaited(
-                                                      Clipboard.setData(ClipboardData(text: vm.message!)),
-                                                    );
+                                                    unawaited(Clipboard.setData(ClipboardData(text: vm.message!)));
                                                     if (checkPlatformIsDesktop()) {
                                                       context.showSnackBar(t.general.copiedToClipboard);
                                                     }
