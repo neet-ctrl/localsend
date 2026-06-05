@@ -658,9 +658,17 @@ class _DeviceCard extends StatelessWidget {
     context.push(() => HubChatPage(device: device));
   }
 
-  void _openFiles(BuildContext context) {
-    context.notifier(hubFilesProvider).openDevice(device);
-    context.push(() => HubRemoteFilesPage(device: device));
+  Future<void> _openFiles(BuildContext context) async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const _FilesComingSoonDialog(),
+    );
+    if (!context.mounted) return;
+    if (proceed == true) {
+      context.notifier(hubFilesProvider).openDevice(device);
+      context.push(() => HubRemoteFilesPage(device: device));
+    }
   }
 }
 
@@ -869,4 +877,247 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "Coming soon" gate dialog for the Files feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FilesComingSoonDialog extends StatefulWidget {
+  const _FilesComingSoonDialog();
+
+  @override
+  State<_FilesComingSoonDialog> createState() => _FilesComingSoonDialogState();
+}
+
+class _FilesComingSoonDialogState extends State<_FilesComingSoonDialog> {
+  final _controller = TextEditingController();
+  bool _obscure = true;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onOk() async {
+    final value = _controller.text.trim();
+    if (value == 'Savan') {
+      Navigator.of(context).pop(true);
+      return;
+    }
+
+    setState(() => _loading = true);
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    // Capture references before popping — context is invalid after pop.
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+    nav.pop(false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: const [
+            Icon(Icons.favorite_rounded, color: kAccentCyan, size: 18),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "Thank you for your comment! We'll review it soon.",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF0D1220),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
+            colors: isDark
+                ? [const Color(0xFF111827), const Color(0xFF0D1220)]
+                : [Colors.white, const Color(0xFFF0F4FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(
+            color: isDark ? kGlassBorder : const Color(0x1A000000),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: kAccentCyan.withValues(alpha: 0.08),
+              blurRadius: 40,
+              spreadRadius: 4,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon badge
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [kAccentCyan.withValues(alpha: 0.18), kAccentPurple.withValues(alpha: 0.18)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                border: Border.all(color: kAccentCyan.withValues(alpha: 0.3)),
+              ),
+              child: const Icon(Icons.folder_special_rounded, color: kAccentCyan, size: 32),
+            ),
+            const SizedBox(height: 20),
+
+            // Title
+            Text(
+              'Coming Soon',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Subtitle
+            Text(
+              'This feature will be available soon.\nWe\'re working hard to bring it to you!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: isDark ? const Color(0xFF8899BB) : const Color(0xFF6B7FA3),
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            // Divider
+            Container(height: 1, color: isDark ? kGlassBorder : const Color(0x1A000000)),
+            const SizedBox(height: 24),
+
+            // Comment label
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Leave a comment for us',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Password-style input
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: isDark ? const Color(0xFF1A2235) : const Color(0xFFF5F7FF),
+                border: Border.all(
+                  color: isDark ? kGlassBorder : const Color(0x1A000000),
+                ),
+              ),
+              child: TextField(
+                controller: _controller,
+                obscureText: _obscure,
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontSize: 15,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Your comment…',
+                  hintStyle: TextStyle(
+                    color: isDark ? const Color(0xFF4A5568) : const Color(0xFFB0BEC5),
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      size: 18,
+                      color: isDark ? const Color(0xFF4A5568) : const Color(0xFFB0BEC5),
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ),
+                onSubmitted: (_) => _onOk(),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF8899BB) : const Color(0xFF6B7FA3),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _loading ? null : _onOk,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kAccentCyan,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _loading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                          )
+                        : const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 }
