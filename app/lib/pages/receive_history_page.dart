@@ -63,6 +63,7 @@ class ReceiveHistoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entries = context.watch(receiveHistoryProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: basicLocalSendAppbar(t.receiveHistoryPage.title),
       body: ResponsiveListView(
@@ -121,116 +122,126 @@ class ReceiveHistoryPage extends StatelessWidget {
           else
             ...entries.map((entry) {
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                child: InkWell(
-                  splashColor: Colors.transparent,
-                  splashFactory: NoSplash.splashFactory,
-                  highlightColor: Colors.transparent,
-                  hoverColor: Colors.transparent,
-                  onTap: entry.path != null || entry.isMessage
-                      ? () async {
-                          if (entry.isMessage) {
-                            final vm = ViewProvider((ref) {
-                              return ReceivePageVm(
-                                status: SessionStatus.waiting,
-                                sender: Device(
-                                  signalingId: null,
-                                  ip: '0.0.0.0',
-                                  version: '1.0.0',
-                                  port: 8080,
-                                  https: false,
-                                  fingerprint: 'fingerprint',
-                                  alias: entry.senderAlias,
-                                  deviceModel: 'deviceModel',
-                                  deviceType: DeviceType.web,
-                                  download: true,
-                                  discoveryMethods: const {},
-                                ),
-                                showSenderInfo: false,
-                                files: [],
-                                message: entry.fileName,
-                                onAccept: () {},
-                                onDecline: () {},
-                                onClose: () {},
-                              );
-                            });
-
-                            // ignore: unawaited_futures
-                            context.push(() => ReceivePage(vm));
-                            return;
-                          }
-
-                          await _openFile(context, entry, context.redux(receiveHistoryProvider));
-                        }
-                      : null,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      FilePathThumbnail(
-                        path: entry.path,
-                        fileType: entry.fileType,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 3),
-                            Text(
-                              entry.fileName,
-                              style: const TextStyle(fontSize: 16),
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                            ),
-                            Text(
-                              '${entry.timestampString} - ${entry.fileSize.asReadableFileSize} - ${entry.senderAlias}',
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      PopupMenuButton<_EntryOption>(
-                        onSelected: (_EntryOption item) async {
-                          switch (item) {
-                            case _EntryOption.open:
-                              await _openFile(context, entry, context.redux(receiveHistoryProvider));
-                              break;
-                            case _EntryOption.showInFolder:
-                              if (entry.path != null) {
-                                await openFolder(
-                                  folderPath: File(entry.path!).parent.path,
-                                  fileName: path.basename(entry.path!),
+                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? kGlassFill : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    splashColor: kAccentCyan.withValues(alpha: 0.06),
+                    highlightColor: Colors.transparent,
+                    hoverColor: isDark ? kGlassFill : const Color(0xFFF0F4FF),
+                    onTap: entry.path != null || entry.isMessage
+                        ? () async {
+                            if (entry.isMessage) {
+                              final vm = ViewProvider((ref) {
+                                return ReceivePageVm(
+                                  status: SessionStatus.waiting,
+                                  sender: Device(
+                                    signalingId: null,
+                                    ip: '0.0.0.0',
+                                    version: '1.0.0',
+                                    port: 8080,
+                                    https: false,
+                                    fingerprint: 'fingerprint',
+                                    alias: entry.senderAlias,
+                                    deviceModel: 'deviceModel',
+                                    deviceType: DeviceType.web,
+                                    download: true,
+                                    discoveryMethods: const {},
+                                  ),
+                                  showSenderInfo: false,
+                                  files: [],
+                                  message: entry.fileName,
+                                  onAccept: () {},
+                                  onDecline: () {},
+                                  onClose: () {},
                                 );
-                              }
-                              break;
-                            case _EntryOption.info:
-                              // ignore: use_build_context_synchronously
-                              await showDialog(
-                                context: context,
-                                builder: (_) => FileInfoDialog(entry: entry),
-                              );
-                              break;
-                            case _EntryOption.delete:
-                              // ignore: use_build_context_synchronously
-                              await context.redux(receiveHistoryProvider).dispatchAsync(RemoveHistoryEntryAction(entry.id));
-                              break;
+                              });
+
+                              // ignore: unawaited_futures
+                              context.push(() => ReceivePage(vm));
+                              return;
+                            }
+
+                            await _openFile(context, entry, context.redux(receiveHistoryProvider));
                           }
-                        },
-                        itemBuilder: (BuildContext context) {
-                          return (entry.path != null ? _optionsAll : _optionsWithoutOpen).map((e) {
-                            return PopupMenuItem<_EntryOption>(
-                              value: e,
-                              child: Text(e.label),
-                            );
-                          }).toList();
-                        },
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          FilePathThumbnail(
+                            path: entry.path,
+                            fileType: entry.fileType,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 3),
+                                Text(
+                                  entry.fileName,
+                                  style: const TextStyle(fontSize: 16),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                ),
+                                Text(
+                                  '${entry.timestampString} - ${entry.fileSize.asReadableFileSize} - ${entry.senderAlias}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  style: TextStyle(color: isDark ? const Color(0xFF6B7FA3) : Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          PopupMenuButton<_EntryOption>(
+                            onSelected: (_EntryOption item) async {
+                              switch (item) {
+                                case _EntryOption.open:
+                                  await _openFile(context, entry, context.redux(receiveHistoryProvider));
+                                  break;
+                                case _EntryOption.showInFolder:
+                                  if (entry.path != null) {
+                                    await openFolder(
+                                      folderPath: File(entry.path!).parent.path,
+                                      fileName: path.basename(entry.path!),
+                                    );
+                                  }
+                                  break;
+                                case _EntryOption.info:
+                                  // ignore: use_build_context_synchronously
+                                  await showDialog(
+                                    context: context,
+                                    builder: (_) => FileInfoDialog(entry: entry),
+                                  );
+                                  break;
+                                case _EntryOption.delete:
+                                  // ignore: use_build_context_synchronously
+                                  await context.redux(receiveHistoryProvider).dispatchAsync(RemoveHistoryEntryAction(entry.id));
+                                  break;
+                              }
+                            },
+                            itemBuilder: (BuildContext context) {
+                              return (entry.path != null ? _optionsAll : _optionsWithoutOpen).map((e) {
+                                return PopupMenuItem<_EntryOption>(
+                                  value: e,
+                                  child: Text(e.label),
+                                );
+                              }).toList();
+                            },
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               );

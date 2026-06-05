@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/native/cmd_helper.dart';
@@ -88,9 +89,36 @@ class _TroubleshootItemState extends State<_TroubleshootItem> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(top: 15),
-      child: Card(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF1A2235), const Color(0xFF111827)]
+                : [Colors.white, const Color(0xFFF0F4FF)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+          boxShadow: isDark
+              ? [
+                  BoxShadow(
+                    color: kAccentCyan.withValues(alpha: 0.04),
+                    blurRadius: 16,
+                    spreadRadius: -4,
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 12,
+                    spreadRadius: -2,
+                  ),
+                ],
+        ),
         child: Padding(
           padding: const EdgeInsets.all(15),
           child: Column(
@@ -131,7 +159,22 @@ class _TroubleshootItemState extends State<_TroubleshootItem> {
                         ...?widget.primaryButton?.onTap?.commands?.map((cmd) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 10),
-                            child: Text(cmd, style: const TextStyle(fontFamily: 'RobotoMono')),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isDark ? kBgDark : const Color(0xFFF0F4FF),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+                              ),
+                              child: Text(
+                                cmd,
+                                style: TextStyle(
+                                  fontFamily: 'RobotoMono',
+                                  color: isDark ? kAccentCyan : const Color(0xFF0D1220),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           );
                         }),
                       ],

@@ -3,6 +3,7 @@ import 'package:common/util/network_interfaces.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:local_hero/local_hero.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/widget/custom_basic_appbar.dart';
@@ -43,6 +44,8 @@ class _NetworkInterfacesPageState extends State<NetworkInterfacesPage> {
     final Future<void> Function(List<String>?) updateFunction = settings.networkWhitelist != null
         ? context.notifier(settingsProvider).setNetworkWhitelist
         : context.notifier(settingsProvider).setNetworkBlacklist;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: basicLocalSendAppbar(t.networkInterfacesPage.title),
       body: LocalHeroScope(
@@ -65,9 +68,8 @@ class _NetworkInterfacesPageState extends State<NetworkInterfacesPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
             ScrollConfiguration(
-              // By default, Flutter only allows dragging with touch devices.
-              // We also allow dragging with mouse.
               behavior: const MaterialScrollBehavior().copyWith(
                 dragDevices: {
                   PointerDeviceKind.mouse,
@@ -86,24 +88,33 @@ class _NetworkInterfacesPageState extends State<NetworkInterfacesPage> {
                       networkBlacklist: settings.networkBlacklist,
                       interface: e.$2,
                     );
-                    final style = ignored
-                        ? const TextStyle(
-                            color: Colors.grey,
+                    final textStyle = ignored
+                        ? TextStyle(
+                            color: isDark ? const Color(0xFF4A5568) : Colors.grey,
                             decoration: TextDecoration.lineThrough,
                           )
                         : null;
                     return Padding(
                       padding: const EdgeInsets.only(right: 10),
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('[#${i + 1}] ${e.$1}', style: style),
-                              ...e.$2.map((ip) => Text(ip, style: style)),
-                            ],
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: ignored
+                              ? (isDark ? kBgDark : const Color(0xFFF0F4FF))
+                              : (isDark ? kGlassFill : Colors.white),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: ignored
+                                ? (isDark ? const Color(0xFF1E2D47) : const Color(0x0A000000))
+                                : (isDark ? kGlassBorder : const Color(0x1A000000)),
                           ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('[#${i + 1}] ${e.$1}', style: textStyle),
+                            ...e.$2.map((ip) => Text(ip, style: textStyle)),
+                          ],
                         ),
                       ),
                     );

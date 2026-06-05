@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/pages/receive_page.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
@@ -29,6 +30,7 @@ class ReceiveOptionsPage extends StatelessWidget {
       );
     }
     final selectState = ref.watch(selectedReceivingFilesProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -87,7 +89,7 @@ class ReceiveOptionsPage extends StatelessWidget {
                     if (receiveSession.containsDirectories && !receiveSession.saveToGallery) ...[
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(t.receiveOptionsPage.saveToGalleryOff, style: const TextStyle(color: Colors.grey)),
+                        child: Text(t.receiveOptionsPage.saveToGalleryOff, style: TextStyle(color: isDark ? const Color(0xFF6B7FA3) : Colors.grey)),
                       ),
                     ],
                   ],
@@ -122,68 +124,80 @@ class ReceiveOptionsPage extends StatelessWidget {
           ...vm.files.map((file) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(file.fileType.icon, size: 46),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          selectState[file.id] ?? file.fileName,
-                          style: const TextStyle(fontSize: 16),
-                          maxLines: 1,
-                          overflow: TextOverflow.fade,
-                          softWrap: false,
-                        ),
-                        Text(
-                          '${!selectState.containsKey(file.id) ? t.general.skipped : (selectState[file.id] == file.fileName ? t.general.unchanged : t.general.renamed)} - ${file.size.asReadableFileSize}',
-                          style: TextStyle(
-                            color: !selectState.containsKey(file.id)
-                                ? Colors.grey
-                                : (selectState[file.id] == file.fileName ? Theme.of(context).colorScheme.onSecondaryContainer : Colors.orange),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark ? kGlassFill : const Color(0xFFF8FAFF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CustomIconButton(
-                        onPressed: selectState[file.id] == null
-                            ? null
-                            : () async {
-                                final result = await showDialog<String>(
-                                  context: context,
-                                  builder: (_) => FileNameInputDialog(
-                                    originalName: file.fileName,
-                                    initialName: selectState[file.id]!,
-                                  ),
-                                );
-                                if (result != null) {
-                                  ref.notifier(selectedReceivingFilesProvider).rename(file.id, result);
-                                }
-                              },
-                        child: const Icon(Icons.edit),
+                      Icon(file.fileType.icon, size: 46),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              selectState[file.id] ?? file.fileName,
+                              style: const TextStyle(fontSize: 16),
+                              maxLines: 1,
+                              overflow: TextOverflow.fade,
+                              softWrap: false,
+                            ),
+                            Text(
+                              '${!selectState.containsKey(file.id) ? t.general.skipped : (selectState[file.id] == file.fileName ? t.general.unchanged : t.general.renamed)} - ${file.size.asReadableFileSize}',
+                              style: TextStyle(
+                                color: !selectState.containsKey(file.id)
+                                    ? (isDark ? const Color(0xFF6B7FA3) : Colors.grey)
+                                    : (selectState[file.id] == file.fileName
+                                        ? Theme.of(context).colorScheme.onSecondaryContainer
+                                        : kAccentCyan.withValues(alpha: 0.8)),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      Checkbox(
-                        value: selectState.containsKey(file.id),
-                        activeColor: Theme.of(context).colorScheme.onSurface,
-                        checkColor: Theme.of(context).colorScheme.surface,
-                        onChanged: (selected) {
-                          if (selected == true) {
-                            ref.notifier(selectedReceivingFilesProvider).select(file);
-                          } else {
-                            ref.notifier(selectedReceivingFilesProvider).unselect(file.id);
-                          }
-                        },
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CustomIconButton(
+                            onPressed: selectState[file.id] == null
+                                ? null
+                                : () async {
+                                    final result = await showDialog<String>(
+                                      context: context,
+                                      builder: (_) => FileNameInputDialog(
+                                        originalName: file.fileName,
+                                        initialName: selectState[file.id]!,
+                                      ),
+                                    );
+                                    if (result != null) {
+                                      ref.notifier(selectedReceivingFilesProvider).rename(file.id, result);
+                                    }
+                                  },
+                            child: const Icon(Icons.edit),
+                          ),
+                          Checkbox(
+                            value: selectState.containsKey(file.id),
+                            activeColor: Theme.of(context).colorScheme.onSurface,
+                            checkColor: Theme.of(context).colorScheme.surface,
+                            onChanged: (selected) {
+                              if (selected == true) {
+                                ref.notifier(selectedReceivingFilesProvider).select(file);
+                              } else {
+                                ref.notifier(selectedReceivingFilesProvider).unselect(file.id);
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             );
           }),

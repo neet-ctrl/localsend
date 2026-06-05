@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/provider/logging/http_logs_provider.dart';
 import 'package:localsend_app/widget/copyable_text.dart';
 import 'package:localsend_app/widget/custom_basic_appbar.dart';
@@ -14,6 +15,7 @@ class HttpLogsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final logs = context.ref.watch(httpLogsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: basicLocalSendAppbar('HTTP Logs'),
       body: ResponsiveListView(
@@ -22,6 +24,10 @@ class HttpLogsPage extends StatelessWidget {
           Row(
             children: [
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? kGlassFill : const Color(0xFFF0F4FF),
+                  foregroundColor: isDark ? Colors.white : const Color(0xFF0D1220),
+                ),
                 onPressed: () => context.ref.notifier(httpLogsProvider).clear(),
                 child: const Text('Clear'),
               ),
@@ -33,7 +39,7 @@ class HttpLogsPage extends StatelessWidget {
               prefix: TextSpan(
                 text: '[${_dateFormat.format(log.timestamp)}] ',
                 style: const TextStyle(
-                  color: Colors.green,
+                  color: Color(0xFF00BFA5),
                   fontWeight: FontWeight.bold,
                 ),
               ),

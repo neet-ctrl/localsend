@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/provider/logging/discovery_logs_provider.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
 import 'package:localsend_app/widget/copyable_text.dart';
@@ -16,6 +17,7 @@ class DiscoveryDebugPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final ref = context.ref;
     final logs = ref.watch(discoveryLoggerProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: basicLocalSendAppbar('Discovery Debugging'),
       body: ResponsiveListView(
@@ -29,6 +31,10 @@ class DiscoveryDebugPage extends StatelessWidget {
               ),
               const SizedBox(width: 20),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? kGlassFill : const Color(0xFFF0F4FF),
+                  foregroundColor: isDark ? Colors.white : const Color(0xFF0D1220),
+                ),
                 onPressed: () => ref.notifier(discoveryLoggerProvider).clear(),
                 child: const Text('Clear'),
               ),
@@ -40,7 +46,7 @@ class DiscoveryDebugPage extends StatelessWidget {
               prefix: TextSpan(
                 text: '[${_dateFormat.format(log.timestamp)}] ',
                 style: const TextStyle(
-                  color: Colors.green,
+                  color: Color(0xFF00BFA5),
                   fontWeight: FontWeight.bold,
                 ),
               ),

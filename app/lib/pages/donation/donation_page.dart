@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/model/state/purchase_state.dart';
 import 'package:localsend_app/pages/donation/donation_page_vm.dart';
@@ -21,10 +22,28 @@ class DonationPage extends StatelessWidget {
       init: (context) => context.redux(purchaseProvider).dispatchAsync(FetchPricesAndPurchasesAction()), // ignore: discarded_futures
       // [FOSS_REMOVE_END]
       builder: (context, vm) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Scaffold(
           appBar: basicLocalSendAppbar(t.donationPage.title),
           body: Stack(
             children: [
+              // Gradient background
+              if (isDark)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.topCenter,
+                        radius: 1.4,
+                        colors: [
+                          kAccentPurple.withValues(alpha: 0.06),
+                          kAccentCyan.withValues(alpha: 0.03),
+                          kBgDark,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ResponsiveListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
@@ -53,8 +72,8 @@ class DonationPage extends StatelessWidget {
               if (vm.pending)
                 Container(
                   color: Colors.black.withValues(alpha: 0.1),
-                  child: const Center(
-                    child: CircularProgressIndicator(),
+                  child: Center(
+                    child: CircularProgressIndicator(color: kAccentCyan),
                   ),
                 ),
             ],
@@ -77,10 +96,13 @@ class _StoreDonation extends StatelessWidget {
         ...PurchaseItem.values.map((item) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: FilledButton.icon(
-              onPressed: vm.purchased.contains(item) ? null : () => vm.purchase(item),
-              icon: const Icon(Icons.favorite),
-              label: Text(t.donationPage.donate(amount: vm.prices[item] ?? '...')),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: vm.purchased.contains(item) ? null : () => vm.purchase(item),
+                icon: const Icon(Icons.favorite),
+                label: Text(t.donationPage.donate(amount: vm.prices[item] ?? '...')),
+              ),
             ),
           );
         }),

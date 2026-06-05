@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/pages/debug/discovery_debug_page.dart';
 import 'package:localsend_app/pages/debug/http_logs_page.dart';
 import 'package:localsend_app/pages/debug/security_debug_page.dart';
@@ -22,6 +23,7 @@ class DebugPage extends StatelessWidget {
     final appArguments = context.watch(appArgumentsProvider);
     final portableMode = context.watch(persistenceProvider.select((state) => state.isPortableMode()));
     final store = SharedPreferencesStorePlatform.instance;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: basicLocalSendAppbar('Debugging'),
@@ -59,33 +61,45 @@ class DebugPage extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text('More', style: DebugEntry.headerStyle),
-          const SizedBox(height: 5),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              FilledButton(
-                onPressed: () async => context.push(() => const SecurityDebugPage()),
-                child: const Text('Security'),
-              ),
-              FilledButton(
-                onPressed: () async => context.push(() => const DiscoveryDebugPage()),
-                child: const Text('Discovery'),
-              ),
-              FilledButton(
-                onPressed: () async => context.push(() => const HttpLogsPage()),
-                child: const Text('HTTP Logs'),
-              ),
-              if (kDebugMode)
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? kGlassFill : const Color(0xFFF8FAFF),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+            ),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
                 FilledButton(
-                  onPressed: () async => context.push(() => const RefenaTracingPage()),
-                  child: const Text('Refena Tracing'),
+                  onPressed: () async => context.push(() => const SecurityDebugPage()),
+                  child: const Text('Security'),
                 ),
-              FilledButton(
-                onPressed: () async => await context.ref.read(persistenceProvider).clear(),
-                child: const Text('Clear settings'),
-              ),
-            ],
+                FilledButton(
+                  onPressed: () async => context.push(() => const DiscoveryDebugPage()),
+                  child: const Text('Discovery'),
+                ),
+                FilledButton(
+                  onPressed: () async => context.push(() => const HttpLogsPage()),
+                  child: const Text('HTTP Logs'),
+                ),
+                if (kDebugMode)
+                  FilledButton(
+                    onPressed: () async => context.push(() => const RefenaTracingPage()),
+                    child: const Text('Refena Tracing'),
+                  ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Theme.of(context).colorScheme.onError,
+                  ),
+                  onPressed: () async => await context.ref.read(persistenceProvider).clear(),
+                  child: const Text('Clear settings'),
+                ),
+              ],
+            ),
           ),
         ],
       ),

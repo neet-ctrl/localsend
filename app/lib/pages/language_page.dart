@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/widget/custom_basic_appbar.dart';
@@ -27,6 +28,7 @@ class _LanguagePageState extends State<LanguagePage> {
   Widget build(BuildContext context) {
     final t = Translations.of(context);
     final activeLocale = context.ref.watch(settingsProvider.select((s) => s.locale));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: basicLocalSendAppbar(t.sendTab.selection.title),
       body: ResponsiveListView(
@@ -36,25 +38,43 @@ class _LanguagePageState extends State<LanguagePage> {
             null,
             ...AppLocale.values,
           ].map((locale) {
-            return ListTile(
-              onTap: () async {
-                await context.ref.notifier(settingsProvider).setLocale(locale);
-                if (locale == null) {
-                  await LocaleSettings.useDeviceLocale();
-                } else {
-                  await LocaleSettings.setLocale(locale);
-                }
-              },
-              title: Row(
-                children: [
-                  Flexible(
-                    child: Text(locale?.humanName ?? t.settingsTab.general.languageOptions.system),
+            final isActive = locale == activeLocale;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? kAccentCyan.withValues(alpha: 0.08)
+                      : (isDark ? kGlassFill : Colors.white),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isActive
+                        ? kAccentCyan.withValues(alpha: 0.3)
+                        : (isDark ? kGlassBorder : const Color(0x1A000000)),
                   ),
-                  if (locale == activeLocale) ...[
-                    const SizedBox(width: 10),
-                    const Icon(Icons.check_circle, color: Colors.green),
-                  ],
-                ],
+                ),
+                child: ListTile(
+                  onTap: () async {
+                    await context.ref.notifier(settingsProvider).setLocale(locale);
+                    if (locale == null) {
+                      await LocaleSettings.useDeviceLocale();
+                    } else {
+                      await LocaleSettings.setLocale(locale);
+                    }
+                  },
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  title: Row(
+                    children: [
+                      Flexible(
+                        child: Text(locale?.humanName ?? t.settingsTab.general.languageOptions.system),
+                      ),
+                      if (isActive) ...[
+                        const SizedBox(width: 10),
+                        const Icon(Icons.check_circle, color: kAccentCyan),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             );
           }),

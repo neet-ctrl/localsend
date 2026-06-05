@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:common/model/file_type.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/file_size_helper.dart';
@@ -21,6 +22,7 @@ class SelectedFilesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final ref = context.ref;
     final selectedFiles = ref.watch(selectedSendingFilesProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: basicLocalSendAppbar(t.sendTab.selection.title),
@@ -73,13 +75,23 @@ class SelectedFilesPage extends StatelessWidget {
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: InkWell(
-                      splashColor: Colors.transparent,
-                      splashFactory: NoSplash.splashFactory,
-                      highlightColor: Colors.transparent,
-                      hoverColor: Colors.transparent,
-                      onTap: file.path != null ? () async => openFile(context, file.fileType, file.path!) : null,
-                      child: Card(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: isDark
+                              ? [const Color(0xFF1A2235), const Color(0xFF111827)]
+                              : [Colors.white, const Color(0xFFF8FAFF)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        splashColor: kAccentCyan.withValues(alpha: 0.06),
+                        highlightColor: Colors.transparent,
+                        onTap: file.path != null ? () async => openFile(context, file.fileType, file.path!) : null,
                         child: Padding(
                           padding: const EdgeInsets.all(10),
                           child: Row(

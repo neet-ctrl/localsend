@@ -1,6 +1,7 @@
 import 'package:common/model/file_type.dart';
 import 'package:device_apps/device_apps.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/provider/apk_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
@@ -79,6 +80,7 @@ class _ApkPickerPageState extends State<ApkPickerPage> with Refena {
   Widget build(BuildContext context) {
     final apkParams = ref.watch(apkSearchParamProvider);
     final apkAsync = ref.watch(apkProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -200,63 +202,78 @@ class _ApkPickerPageState extends State<ApkPickerPage> with Refena {
                     (context, index) {
                       final app = appList[index];
                       final thumbnail = (app as ApplicationWithIcon).icon;
+                      final isSelected = _selectedApps.contains(app);
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
-                        child: InkWell(
-                          onTap: () async => (apkParams.selectMultipleApps) ? _appSelection(app) : _pickApp(app),
-                          customBorder: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? kAccentCyan.withValues(alpha: 0.08)
+                                : (isDark ? kGlassFill : const Color(0xFFF8FAFF)),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isSelected
+                                  ? kAccentCyan.withValues(alpha: 0.3)
+                                  : (isDark ? kGlassBorder : const Color(0x1A000000)),
+                            ),
                           ),
-                          child: Row(
-                            children: [
-                              MemoryThumbnail(
-                                bytes: thumbnail,
-                                size: 60,
-                                fileType: FileType.apk,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      app.appName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.fade,
-                                      softWrap: false,
+                          child: InkWell(
+                            onTap: () async => (apkParams.selectMultipleApps) ? _appSelection(app) : _pickApp(app),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                children: [
+                                  MemoryThumbnail(
+                                    bytes: thumbnail,
+                                    size: 60,
+                                    fileType: FileType.apk,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          app.appName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.fade,
+                                          softWrap: false,
+                                        ),
+                                        Consumer(
+                                          builder: (context, ref) {
+                                            final appSize = ref.watch(apkSizeProvider(app.apkFilePath));
+                                            final appSizeString = appSize.maybeWhen(
+                                              data: (size) => '${size.asReadableFileSize} • ',
+                                              orElse: () => '',
+                                            );
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '$appSizeString${app.versionName != null ? 'v${app.versionName}' : ''}',
+                                                  style: Theme.of(context).textTheme.bodySmall,
+                                                ),
+                                                Text(
+                                                  app.packageName,
+                                                  style: Theme.of(context).textTheme.bodySmall,
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     ),
-                                    Consumer(
-                                      builder: (context, ref) {
-                                        final appSize = ref.watch(apkSizeProvider(app.apkFilePath));
-                                        final appSizeString = appSize.maybeWhen(
-                                          data: (size) => '${size.asReadableFileSize} • ',
-                                          orElse: () => '',
-                                        );
-                                        return Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '$appSizeString${app.versionName != null ? 'v${app.versionName}' : ''}',
-                                              style: Theme.of(context).textTheme.bodySmall,
-                                            ),
-                                            Text(
-                                              app.packageName,
-                                              style: Theme.of(context).textTheme.bodySmall,
-                                            ),
-                                          ],
-                                        );
-                                      },
+                                  ),
+                                  if (apkParams.selectMultipleApps)
+                                    Icon(
+                                      isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                                      color: isSelected ? kAccentCyan : (isDark ? const Color(0xFF4A5568) : Colors.grey),
                                     ),
-                                  ],
-                                ),
+                                ],
                               ),
-                              if (apkParams.selectMultipleApps)
-                                Icon(
-                                  _selectedApps.contains(app) ? Icons.check_circle : Icons.radio_button_unchecked,
-                                  color: _selectedApps.contains(app) ? Theme.of(context).iconTheme.color : Colors.grey,
-                                ),
-                            ],
+                            ),
                           ),
                         ),
                       );
@@ -268,9 +285,9 @@ class _ApkPickerPageState extends State<ApkPickerPage> with Refena {
                 return SliverToBoxAdapter(child: Text('Error: $e\n$st'));
               },
               loading: () {
-                return const SliverToBoxAdapter(
+                return SliverToBoxAdapter(
                   child: Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(color: kAccentCyan),
                   ),
                 );
               },

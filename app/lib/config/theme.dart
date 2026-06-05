@@ -193,6 +193,92 @@ ThemeData _buildSpaceTheme(Brightness brightness) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       behavior: SnackBarBehavior.floating,
     ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: isDark ? kCardSurface : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+      ),
+      titleTextStyle: TextStyle(
+        color: isDark ? Colors.white : const Color(0xFF0D1220),
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+      ),
+      contentTextStyle: TextStyle(
+        color: isDark ? const Color(0xFFB0BDD0) : const Color(0xFF4A5568),
+        fontSize: 14,
+      ),
+      elevation: 0,
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: kAccentCyan,
+        foregroundColor: kBgDark,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12 + desktopPaddingFix),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.3),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: isDark ? kCardSurface : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      elevation: 0,
+    ),
+    listTileTheme: ListTileThemeData(
+      iconColor: isDark ? const Color(0xFFB0BDD0) : const Color(0xFF4A5568),
+      textColor: isDark ? Colors.white : const Color(0xFF0D1220),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return kBgDark;
+        return isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4);
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return kAccentCyan;
+        return isDark ? const Color(0xFF2A3A5C) : const Color(0xFFCBD5E1);
+      }),
+    ),
+    checkboxTheme: CheckboxThemeData(
+      fillColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return kAccentCyan;
+        return Colors.transparent;
+      }),
+      checkColor: WidgetStateProperty.all(kBgDark),
+      side: BorderSide(color: isDark ? kGlassBorder : const Color(0x40000000), width: 1.5),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: kAccentCyan,
+      foregroundColor: kBgDark,
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    toggleButtonsTheme: ToggleButtonsThemeData(
+      selectedColor: kAccentCyan,
+      selectedFillColor: kAccentCyan.withValues(alpha: 0.15),
+      color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
+      borderColor: isDark ? kGlassBorder : const Color(0x1A000000),
+      selectedBorderColor: kAccentCyan.withValues(alpha: 0.4),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: isDark ? kCardSurface : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+      ),
+      textStyle: TextStyle(color: isDark ? Colors.white : const Color(0xFF0D1220), fontSize: 14),
+    ),
   );
 }
 

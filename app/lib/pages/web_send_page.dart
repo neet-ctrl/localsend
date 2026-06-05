@@ -83,6 +83,8 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return PopScope(
       onPopInvokedWithResult: (_, __) async {
         if (_stateEnum != _ServerState.running) {
@@ -112,7 +114,7 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (_stateEnum == _ServerState.initializing || _stateEnum == _ServerState.stopping) ...[
-                    const CircularProgressIndicator(),
+                    CircularProgressIndicator(color: kAccentCyan),
                     const SizedBox(height: 20),
                     Center(
                       child: Text(
@@ -121,7 +123,7 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
                       ),
                     ),
                   ] else if (_initializedError != null) ...[
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(Icons.error_outline, size: 48, color: Color(0xFFFF4D6D)),
                     const SizedBox(height: 10),
                     Center(
                       child: Text(t.webSharePage.error, style: Theme.of(context).textTheme.titleLarge),
@@ -144,10 +146,38 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
               children: [
                 Text(t.webSharePage.openLink(n: networkState.localIps.length), style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 10),
-                Card(
-                  color: Theme.of(context).colorScheme.secondaryContainer,
+                // Glassmorphic URL card
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? [const Color(0xFF1A2235), const Color(0xFF111827)]
+                          : [Colors.white, const Color(0xFFF0F4FF)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isDark ? kGlassBorder : const Color(0x1A000000),
+                    ),
+                    boxShadow: isDark
+                        ? [
+                            BoxShadow(
+                              color: kAccentCyan.withValues(alpha: 0.05),
+                              blurRadius: 20,
+                              spreadRadius: -4,
+                            ),
+                          ]
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 16,
+                              spreadRadius: -2,
+                            ),
+                          ],
+                  ),
                   child: Padding(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -173,9 +203,10 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
                                       context.showSnackBar(t.general.copiedToClipboard);
                                     }
                                   },
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    child: Icon(Icons.content_copy, size: 16),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Icon(Icons.content_copy, size: 16, color: isDark ? const Color(0xFFB0BDD0) : const Color(0xFF4A5568)),
                                   ),
                                 ),
                                 InkWell(
@@ -190,9 +221,10 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
                                       ),
                                     );
                                   },
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    child: Icon(Icons.qr_code, size: 16),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Icon(Icons.qr_code, size: 16, color: isDark ? const Color(0xFFB0BDD0) : const Color(0xFF4A5568)),
                                   ),
                                 ),
                                 InkWell(
@@ -206,9 +238,10 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
                                       ),
                                     );
                                   },
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    child: Icon(Icons.tv, size: 16),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Icon(Icons.tv, size: 16, color: isDark ? const Color(0xFFB0BDD0) : const Color(0xFF4A5568)),
                                   ),
                                 ),
                               ],
@@ -231,9 +264,20 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
                   final session = entry.value;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: Card(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: session.responseHandler != null
+                            ? (isDark ? kAccentCyan.withValues(alpha: 0.06) : kAccentCyan.withValues(alpha: 0.04))
+                            : (isDark ? kGlassFill : const Color(0xFFF8FAFF)),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: session.responseHandler != null
+                              ? kAccentCyan.withValues(alpha: 0.25)
+                              : (isDark ? kGlassBorder : const Color(0x1A000000)),
+                        ),
+                      ),
                       child: Padding(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
                             Expanded(
@@ -266,7 +310,7 @@ class _WebSendPageState extends State<WebSendPage> with Refena {
                                   ref.notifier(serverProvider).acceptWebSendRequest(session.sessionId);
                                 },
                                 style: TextButton.styleFrom(
-                                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                  foregroundColor: kAccentCyan,
                                 ),
                                 child: const Icon(Icons.check_circle),
                               ),

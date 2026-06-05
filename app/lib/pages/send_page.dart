@@ -61,6 +61,7 @@ class _SendPageState extends State<SendPage> with Refena {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final sendState = ref.watch(
       sendProvider.select((state) => state[widget.sessionId]),
       listener: (prev, next) {
@@ -91,116 +92,137 @@ class _SendPageState extends State<SendPage> with Refena {
       canPop: true,
       child: Scaffold(
         appBar: widget.showAppBar ? basicLocalSendAppbar('') : null,
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: ResponsiveListView.defaultMaxWidth),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 30),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          InitialSlideTransition(
-                            origin: const Offset(0, -1),
-                            duration: const Duration(milliseconds: 400),
-                            child: DeviceListTile(
-                              device: myDevice,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          const InitialFadeTransition(
-                            duration: Duration(milliseconds: 300),
-                            delay: Duration(milliseconds: 400),
-                            child: Icon(Icons.arrow_downward),
-                          ),
-                          const SizedBox(height: 20),
-                          Hero(
-                            tag: 'device-${targetDevice.ip}',
-                            child: DeviceListTile(
-                              device: targetDevice,
-                              nameOverride: targetFavoriteEntry?.alias,
-                            ),
-                          ),
-                        ],
-                      ),
+        body: Stack(
+          children: [
+            // Subtle gradient background
+            if (isDark)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.topCenter,
+                      radius: 1.4,
+                      colors: [
+                        kAccentCyan.withValues(alpha: 0.05),
+                        kAccentPurple.withValues(alpha: 0.03),
+                        kBgDark,
+                      ],
                     ),
-                    if (sendState != null)
-                      InitialFadeTransition(
-                        duration: const Duration(milliseconds: 300),
-                        delay: const Duration(milliseconds: 400),
-                        child: Column(
-                          children: [
-                            switch (sendState.status) {
-                              SessionStatus.waiting => Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: Text(t.sendPage.waiting, textAlign: TextAlign.center),
-                              ),
-                              SessionStatus.declined => Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: Text(
-                                  t.sendPage.rejected,
-                                  style: TextStyle(color: Theme.of(context).colorScheme.warning),
-                                  textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: ResponsiveListView.defaultMaxWidth),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 30),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              InitialSlideTransition(
+                                origin: const Offset(0, -1),
+                                duration: const Duration(milliseconds: 400),
+                                child: DeviceListTile(
+                                  device: myDevice,
                                 ),
                               ),
-                              SessionStatus.tooManyAttempts => Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: Text(
-                                  t.sendPage.tooManyAttempts,
-                                  style: TextStyle(color: Theme.of(context).colorScheme.warning),
-                                  textAlign: TextAlign.center,
+                              const SizedBox(height: 20),
+                              const InitialFadeTransition(
+                                duration: Duration(milliseconds: 300),
+                                delay: Duration(milliseconds: 400),
+                                child: Icon(Icons.arrow_downward),
+                              ),
+                              const SizedBox(height: 20),
+                              Hero(
+                                tag: 'device-${targetDevice.ip}',
+                                child: DeviceListTile(
+                                  device: targetDevice,
+                                  nameOverride: targetFavoriteEntry?.alias,
                                 ),
                               ),
-                              SessionStatus.recipientBusy => Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: Text(
-                                  t.sendPage.busy,
-                                  style: TextStyle(color: Theme.of(context).colorScheme.warning),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              SessionStatus.finishedWithErrors => Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(t.general.error, style: TextStyle(color: Theme.of(context).colorScheme.warning)),
-                                    if (sendState.errorMessage != null)
-                                      TextButton(
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: Theme.of(context).colorScheme.warning,
-                                        ),
-                                        onPressed: () async => showDialog(
-                                          context: context,
-                                          builder: (_) => ErrorDialog(error: sendState.errorMessage!),
-                                        ),
-                                        child: const Icon(Icons.info),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              _ => const SizedBox(),
-                            },
-                            Center(
-                              child: FilledButton.icon(
-                                onPressed: () {
-                                  _cancel();
-                                  context.pop();
-                                },
-                                icon: Icon(waiting ? Icons.close : Icons.check_circle),
-                                label: Text(waiting ? t.general.cancel : t.general.close),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
+                        if (sendState != null)
+                          InitialFadeTransition(
+                            duration: const Duration(milliseconds: 300),
+                            delay: const Duration(milliseconds: 400),
+                            child: Column(
+                              children: [
+                                switch (sendState.status) {
+                                  SessionStatus.waiting => Padding(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    child: Text(t.sendPage.waiting, textAlign: TextAlign.center),
+                                  ),
+                                  SessionStatus.declined => Padding(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    child: Text(
+                                      t.sendPage.rejected,
+                                      style: TextStyle(color: Theme.of(context).colorScheme.warning),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  SessionStatus.tooManyAttempts => Padding(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    child: Text(
+                                      t.sendPage.tooManyAttempts,
+                                      style: TextStyle(color: Theme.of(context).colorScheme.warning),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  SessionStatus.recipientBusy => Padding(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    child: Text(
+                                      t.sendPage.busy,
+                                      style: TextStyle(color: Theme.of(context).colorScheme.warning),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  SessionStatus.finishedWithErrors => Padding(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(t.general.error, style: TextStyle(color: Theme.of(context).colorScheme.warning)),
+                                        if (sendState.errorMessage != null)
+                                          TextButton(
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: Theme.of(context).colorScheme.warning,
+                                            ),
+                                            onPressed: () async => showDialog(
+                                              context: context,
+                                              builder: (_) => ErrorDialog(error: sendState.errorMessage!),
+                                            ),
+                                            child: const Icon(Icons.info),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  _ => const SizedBox(),
+                                },
+                                Center(
+                                  child: FilledButton.icon(
+                                    onPressed: () {
+                                      _cancel();
+                                      context.pop();
+                                    },
+                                    icon: Icon(waiting ? Icons.close : Icons.check_circle),
+                                    label: Text(waiting ? t.general.cancel : t.general.close),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

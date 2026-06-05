@@ -80,6 +80,7 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
     }
 
     final senderFavoriteEntry = ref.watch(favoritesProvider.select((state) => state.findDevice(vm.sender)));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ViewModelBuilder(
       provider: (ref) => widget.vm,
@@ -99,150 +100,176 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
           },
           canPop: true,
           child: Scaffold(
-            body: SafeArea(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: ResponsiveListView.defaultMaxWidth),
-                  child: Builder(
-                    builder: (context) {
-                      final height = MediaQuery.of(context).size.height;
-                      final smallUi = vm.message != null && height < 600;
-                      return Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: smallUi ? 20 : 30),
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (vm.showSenderInfo && !smallUi)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
-                                      child: Icon(vm.sender.deviceType.icon, size: 64),
-                                    ),
-                                  Builder(
-                                    builder: (context) {
-                                      final alias = senderFavoriteEntry?.alias ?? vm.sender.alias;
-                                      if (alias.isEmpty) {
-                                        return Text('', style: TextStyle(fontSize: smallUi ? 32 : 48));
-                                      }
-                                      return FittedBox(
-                                        child: Text(
-                                          alias,
-                                          style: TextStyle(fontSize: smallUi ? 32 : 48),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  if (vm.showSenderInfo) ...[
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        InkWell(
-                                          onTap: () {
-                                            setState(() {
-                                              _showFullIp = !_showFullIp;
-                                            });
-                                          },
-                                          child: DeviceBadge(
-                                            backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                                            foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
-                                            label: switch (vm.sender.ip) {
-                                              String ip => _showFullIp ? ip : '#${ip.visualId}',
-                                              null => 'WebRTC',
-                                            },
-                                          ),
-                                        ),
-                                        if (vm.sender.deviceModel != null) ...[
-                                          const SizedBox(width: 10),
-                                          DeviceBadge(
-                                            backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                                            foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
-                                            label: vm.sender.deviceModel!,
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ],
-                                  const SizedBox(height: 40),
-                                  Text(
-                                    vm.message != null
-                                        ? (vm.isLink ? t.receivePage.subTitleLink : t.receivePage.subTitleMessage)
-                                        : t.receivePage.subTitle(n: vm.files.length),
-                                    style: smallUi ? null : Theme.of(context).textTheme.titleLarge,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  if (vm.message != null)
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
+            body: Stack(
+              children: [
+                // Glassmorphic gradient background
+                if (isDark)
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: Alignment.topCenter,
+                          radius: 1.6,
+                          colors: [
+                            kAccentCyan.withValues(alpha: 0.06),
+                            kAccentPurple.withValues(alpha: 0.04),
+                            kBgDark,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                SafeArea(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: ResponsiveListView.defaultMaxWidth),
+                      child: Builder(
+                        builder: (context) {
+                          final height = MediaQuery.of(context).size.height;
+                          final smallUi = vm.message != null && height < 600;
+                          return Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 20, vertical: smallUi ? 20 : 30),
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      if (vm.showSenderInfo && !smallUi)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 20),
-                                          child: SizedBox(
-                                            height: 100,
-                                            child: Card(
-                                              child: SingleChildScrollView(
-                                                child: Padding(
-                                                  padding: const EdgeInsets.all(10),
-                                                  child: SelectableText(
-                                                    vm.message!,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
+                                          padding: const EdgeInsets.only(bottom: 10),
+                                          child: Icon(vm.sender.deviceType.icon, size: 64),
                                         ),
+                                      Builder(
+                                        builder: (context) {
+                                          final alias = senderFavoriteEntry?.alias ?? vm.sender.alias;
+                                          if (alias.isEmpty) {
+                                            return Text('', style: TextStyle(fontSize: smallUi ? 32 : 48));
+                                          }
+                                          return FittedBox(
+                                            child: Text(
+                                              alias,
+                                              style: TextStyle(fontSize: smallUi ? 32 : 48),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      if (vm.showSenderInfo) ...[
                                         const SizedBox(height: 10),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            ElevatedButton(
-                                              onPressed: () {
-                                                unawaited(
-                                                  Clipboard.setData(ClipboardData(text: vm.message!)),
-                                                );
-                                                if (checkPlatformIsDesktop()) {
-                                                  context.showSnackBar(t.general.copiedToClipboard);
-                                                }
-                                                vm.onAccept();
-                                                context.pop();
+                                            InkWell(
+                                              onTap: () {
+                                                setState(() {
+                                                  _showFullIp = !_showFullIp;
+                                                });
                                               },
-                                              child: Text(t.general.copy),
-                                            ),
-                                            if (vm.isLink)
-                                              Padding(
-                                                padding: const EdgeInsetsDirectional.only(start: 20),
-                                                child: ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Theme.of(context).colorScheme.primary,
-                                                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                                  ),
-                                                  onPressed: () {
-                                                    // ignore: discarded_futures
-                                                    launchUrl(Uri.parse(vm.message!), mode: LaunchMode.externalApplication);
-                                                    vm.onAccept();
-                                                    context.pop();
-                                                  },
-                                                  child: Text(t.general.open),
-                                                ),
+                                              child: DeviceBadge(
+                                                backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                                                foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
+                                                label: switch (vm.sender.ip) {
+                                                  String ip => _showFullIp ? ip : '#${ip.visualId}',
+                                                  null => 'WebRTC',
+                                                },
                                               ),
+                                            ),
+                                            if (vm.sender.deviceModel != null) ...[
+                                              const SizedBox(width: 10),
+                                              DeviceBadge(
+                                                backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                                                foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
+                                                label: vm.sender.deviceModel!,
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ],
-                                    ),
-                                ],
-                              ),
+                                      const SizedBox(height: 40),
+                                      Text(
+                                        vm.message != null
+                                            ? (vm.isLink ? t.receivePage.subTitleLink : t.receivePage.subTitleMessage)
+                                            : t.receivePage.subTitle(n: vm.files.length),
+                                        style: smallUi ? null : Theme.of(context).textTheme.titleLarge,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      if (vm.message != null)
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 20),
+                                              child: SizedBox(
+                                                height: 100,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: isDark ? kGlassFill : const Color(0xFFF0F4FF),
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+                                                  ),
+                                                  child: SingleChildScrollView(
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.all(10),
+                                                      child: SelectableText(
+                                                        vm.message!,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                ElevatedButton(
+                                                  onPressed: () {
+                                                    unawaited(
+                                                      Clipboard.setData(ClipboardData(text: vm.message!)),
+                                                    );
+                                                    if (checkPlatformIsDesktop()) {
+                                                      context.showSnackBar(t.general.copiedToClipboard);
+                                                    }
+                                                    vm.onAccept();
+                                                    context.pop();
+                                                  },
+                                                  child: Text(t.general.copy),
+                                                ),
+                                                if (vm.isLink)
+                                                  Padding(
+                                                    padding: const EdgeInsetsDirectional.only(start: 20),
+                                                    child: ElevatedButton(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: Theme.of(context).colorScheme.primary,
+                                                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                                      ),
+                                                      onPressed: () {
+                                                        // ignore: discarded_futures
+                                                        launchUrl(Uri.parse(vm.message!), mode: LaunchMode.externalApplication);
+                                                        vm.onAccept();
+                                                        context.pop();
+                                                      },
+                                                      child: Text(t.general.open),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                _Actions(vm),
+                              ],
                             ),
-                            _Actions(vm),
-                          ],
-                        ),
-                      );
-                    },
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         );

@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
 import 'package:localsend_app/pages/debug/debug_page.dart';
 import 'package:localsend_app/widget/custom_basic_appbar.dart';
@@ -23,6 +24,7 @@ class AboutPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: basicLocalSendAppbar(t.aboutPage.title),
       body: ResponsiveListView(
@@ -130,46 +132,54 @@ class AboutPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextButton(
-                onPressed: () async {
-                  await launchUrl(Uri.parse('https://localsend.org'));
-                },
-                child: const Text('Homepage'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await launchUrl(Uri.parse('https://github.com/localsend/localsend'), mode: LaunchMode.externalApplication);
-                },
-                child: const Text('Source Code (Github)'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await launchUrl(Uri.parse('https://codeberg.org/localsend/localsend'), mode: LaunchMode.externalApplication);
-                },
-                child: const Text('Source Code (Codeberg)'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await launchUrl(Uri.parse('https://www.apache.org/licenses/LICENSE-2.0'));
-                },
-                child: const Text('Apache License 2.0'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await context.push(() => const LicensePage());
-                },
-                child: const Text('License Notices'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await context.push(() => const DebugPage());
-                },
-                child: const Text('Debugging'),
-              ),
-            ],
+          // Glassmorphic links card
+          Container(
+            decoration: BoxDecoration(
+              color: isDark ? kGlassFill : const Color(0xFFF8FAFF),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextButton(
+                  onPressed: () async {
+                    await launchUrl(Uri.parse('https://localsend.org'));
+                  },
+                  child: const Text('Homepage'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await launchUrl(Uri.parse('https://github.com/localsend/localsend'), mode: LaunchMode.externalApplication);
+                  },
+                  child: const Text('Source Code (Github)'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await launchUrl(Uri.parse('https://codeberg.org/localsend/localsend'), mode: LaunchMode.externalApplication);
+                  },
+                  child: const Text('Source Code (Codeberg)'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await launchUrl(Uri.parse('https://www.apache.org/licenses/LICENSE-2.0'));
+                  },
+                  child: const Text('Apache License 2.0'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await context.push(() => const LicensePage());
+                  },
+                  child: const Text('License Notices'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await context.push(() => const DebugPage());
+                  },
+                  child: const Text('Debugging'),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 50),
         ],
