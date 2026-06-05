@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.Settings
@@ -22,6 +24,7 @@ private const val REQUEST_CODE_PICK_FILE = 3
 
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
+    private var ringbackTone: ToneGenerator? = null
 
     // Overriding the static methods we need from the Java class, as described
     // in the documentation of `FlutterActivity.NewEngineIntentBuilder`
@@ -89,6 +92,32 @@ class MainActivity : FlutterActivity() {
 
                 "isAnimationsEnabled" -> {
                     result.success(isAnimationsEnabled())
+                }
+
+                // ── Ringback tone (caller side) ─────────────────────────────
+                // Uses ToneGenerator.TONE_SUP_RINGTONE — the ITU-T ringback
+                // supervisory tone, exactly what carrier networks play on the
+                // caller's handset while the remote side rings.
+                "startRingback" -> {
+                    try {
+                        ringbackTone?.release()
+                        ringbackTone = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 80)
+                        ringbackTone?.startTone(ToneGenerator.TONE_SUP_RINGTONE)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("TONE_ERROR", e.message, null)
+                    }
+                }
+
+                "stopRingback" -> {
+                    try {
+                        ringbackTone?.stopTone()
+                        ringbackTone?.release()
+                        ringbackTone = null
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("TONE_ERROR", e.message, null)
+                    }
                 }
 
                 else -> result.notImplemented()

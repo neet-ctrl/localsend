@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:common/model/device.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:localsend_app/model/hub/hub_call_state.dart';
+import 'package:localsend_app/provider/hub/hub_ringback_service.dart';
 import 'package:localsend_app/provider/hub/hub_ringtone_service.dart';
 import 'package:localsend_app/provider/network/server/controller/hub_controller.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
@@ -153,8 +154,11 @@ class HubCallNotifier extends Notifier<HubCallState> {
         type: type,
         remoteDevice: device,
       );
+      // Play ringback tone on the caller's side (like carrier "ring ring")
+      HubRingbackService.instance.startRingback();
     } catch (e, st) {
       _log.error(HubLogCategory.calls, 'startCall failed: $e\n$st');
+      HubRingbackService.instance.stopRingback();
       state = state.copyWith(status: HubCallStatus.idle, errorMessage: e.toString());
     }
   }
@@ -224,6 +228,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
   Future<void> endCall() async {
     HubRingtoneService.instance.stop();
+    HubRingbackService.instance.stopRingback(); // stop if caller cancelled while outgoing
     final device = state.remoteDevice;
     final ip = device?.ip;
     _log.info(HubLogCategory.calls, 'Ending call with ${device?.alias}');
@@ -269,6 +274,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
       await _peerConnection?.setRemoteDescription(
         RTCSessionDescription(answer['sdp'] as String?, answer['type'] as String?),
       );
+      HubRingbackService.instance.stopRingback(); // call connected — stop ringback
       state = state.copyWith(status: HubCallStatus.active, startTime: DateTime.now());
       _log.info(HubLogCategory.calls, 'Remote answer applied — call active');
     } catch (e) {

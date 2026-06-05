@@ -16,7 +16,8 @@ class HubVideoCallPage extends StatefulWidget {
   State<HubVideoCallPage> createState() => _HubVideoCallPageState();
 }
 
-class _HubVideoCallPageState extends State<HubVideoCallPage> with Refena {
+class _HubVideoCallPageState extends State<HubVideoCallPage>
+    with Refena, SingleTickerProviderStateMixin {
   Timer? _durationTimer;
   int _durationSeconds = 0;
   bool _isFullscreen = false;
@@ -24,11 +25,25 @@ class _HubVideoCallPageState extends State<HubVideoCallPage> with Refena {
   Timer? _controlsTimer;
   String _videoQuality = '720p';
 
+  // Ripple animation for outgoing state
+  late AnimationController _rippleCtrl;
+
+  // Animated dots for "Calling..." text
+  Timer? _dotsTimer;
+  int _dots = 0;
+
   @override
   void initState() {
     super.initState();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     _resetControlsTimer();
+    _rippleCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+    _dotsTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() => _dots = (_dots + 1) % 4);
+    });
   }
 
   void _startTimer() {
@@ -78,23 +93,64 @@ class _HubVideoCallPageState extends State<HubVideoCallPage> with Refena {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(colors: [Color(0xFF1E3A5C), Color(0xFF0D1E35)]),
-                              border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
+                          if (callState.status == HubCallStatus.outgoing)
+                            AnimatedBuilder(
+                              animation: _rippleCtrl,
+                              builder: (context, child) {
+                                return SizedBox(
+                                  width: 200,
+                                  height: 200,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      for (int i = 0; i < 3; i++) _buildRippleRing(i),
+                                      child!,
+                                    ],
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(colors: [Color(0xFF1E3A5C), Color(0xFF0D1E35)]),
+                                  border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
+                                ),
+                                child: const Icon(Icons.videocam_rounded, color: kAccentCyan, size: 36),
+                              ),
+                            )
+                          else
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const LinearGradient(colors: [Color(0xFF1E3A5C), Color(0xFF0D1E35)]),
+                                border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
+                              ),
+                              child: const Icon(Icons.person_rounded, color: kAccentCyan, size: 40),
                             ),
-                            child: const Icon(Icons.person_rounded, color: kAccentCyan, size: 40),
-                          ),
                           const SizedBox(height: 16),
                           Text(callState.remoteDevice?.alias ?? 'Unknown', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
-                          Text(
-                            callState.status == HubCallStatus.outgoing ? 'Calling...' : (callState.status == HubCallStatus.incoming ? 'Incoming Video Call' : ''),
-                            style: const TextStyle(color: kAccentCyan, fontSize: 15),
-                          ),
+                          if (callState.status == HubCallStatus.outgoing)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _BlinkingDot(),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Calling${'.' * _dots}${' ' * (3 - _dots)}',
+                                  style: const TextStyle(color: Color(0xFF00E676), fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                                ),
+                              ],
+                            )
+                          else
+                            Text(
+                              callState.status == HubCallStatus.incoming ? 'Incoming Video Call' : '',
+                              style: const TextStyle(color: kAccentCyan, fontSize: 15),
+                            ),
                         ],
                       ),
                     ),
@@ -210,6 +266,26 @@ class _HubVideoCallPageState extends State<HubVideoCallPage> with Refena {
     );
   }
 
+  Widget _buildRippleRing(int index) {
+    const delay = [0.0, 0.33, 0.66];
+    final t = (_rippleCtrl.value + delay[index]) % 1.0;
+    final size = 90.0 + t * 90.0;
+    final opacity = (1.0 - t) * 0.5;
+    return Center(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: kAccentCyan.withValues(alpha: opacity),
+            width: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showQualityPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -238,8 +314,47 @@ class _HubVideoCallPageState extends State<HubVideoCallPage> with Refena {
   void dispose() {
     _durationTimer?.cancel();
     _controlsTimer?.cancel();
+    _dotsTimer?.cancel();
+    _rippleCtrl.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
+  }
+}
+
+class _BlinkingDot extends StatefulWidget {
+  @override
+  State<_BlinkingDot> createState() => _BlinkingDotState();
+}
+
+class _BlinkingDotState extends State<_BlinkingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _anim = Tween<double>(begin: 0.2, end: 1.0)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _ctrl.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF00E676)),
+      ),
+    );
   }
 }
 
