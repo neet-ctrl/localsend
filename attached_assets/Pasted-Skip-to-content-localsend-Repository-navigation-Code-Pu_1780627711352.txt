@@ -1,0 +1,137 @@
+Skip to content
+localsend
+Repository navigation
+Code
+Pull requests
+Actions
+Build Debug APK (arm64-v8a)
+Add missing core Rust library to build workflows #5
+Annotations
+1 error and 2 warnings
+build
+failed 1 minute ago in 17m 22s
+2s
+1s
+0s
+1s
+56s
+11s
+0s
+23s
+15m 43s
+Run flutter build apk --debug --target-platform android-arm64
+Running Gradle task 'assembleDebug'...                          
+Checking the license for package NDK (Side by side) 27.0.12077973 in /usr/local/lib/android/sdk/licenses
+License for package NDK (Side by side) 27.0.12077973 accepted.
+Preparing "Install NDK (Side by side) 27.0.12077973 v.27.0.12077973".
+"Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" ready.
+Installing NDK (Side by side) 27.0.12077973 in /usr/local/lib/android/sdk/ndk/27.0.12077973
+"Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" complete.
+"Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" finished.
+Note: /home/runner/.pub-cache/git/device_apps-5dc7956d938541254d2e175766b3b84ea38bb85b/android/src/main/java/fr/g123k/deviceapps/DeviceAppsPlugin.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+/home/runner/.pub-cache/hosted/pub.dev/video_player_android-2.7.16/android/src/main/java/io/flutter/plugins/videoplayer/VideoPlayer.java:99: warning: [removal] onSurfaceDestroyed() in Callback has been deprecated and marked for removal
+  public void onSurfaceDestroyed() {
+              ^
+1 warning
+Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
+License for package CMake 3.22.1 accepted.
+Preparing "Install CMake 3.22.1 v.3.22.1".
+"Install CMake 3.22.1 v.3.22.1" ready.
+Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
+"Install CMake 3.22.1 v.3.22.1" complete.
+"Install CMake 3.22.1 v.3.22.1" finished.
+Resolving dependencies...
+Downloading packages...
++ adaptive_number 1.0.0
++ args 2.4.2 (2.7.0 available)
++ async 2.13.1
++ build_tool 1.0.0 from path /home/runner/.pub-cache/hosted/pub.dev/rhttp-0.13.0/cargokit/gradle/../build_tool
++ collection 1.18.0 (1.19.1 available)
++ convert 3.1.1 (3.1.2 available)
++ crypto 3.0.3 (3.0.7 available)
++ ed25519_edwards 0.3.1
++ fixnum 1.1.1
++ github 9.17.0 (9.25.1 available)
++ hex 0.2.0
++ http 1.1.0 (1.6.0 available)
++ http_parser 4.0.2 (4.1.2 available)
++ json_annotation 4.12.0
++ logging 1.2.0 (1.3.0 available)
++ meta 1.18.3
++ path 1.8.0 (1.9.1 available)
++ petitparser 5.4.0 (7.0.2 available)
++ source_span 1.10.0 (1.10.2 available)
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ toml 0.14.0 (0.18.0 available)
++ typed_data 1.4.0
++ version 3.0.0 (3.0.2 available)
++ yaml 3.1.2 (3.1.3 available)
+Changed 25 dependencies!
+14 packages have newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+Compiling bin/build_tool_runner.dart to kernel file bin/build_tool_runner.dill.
+INFO: Precompiled binaries are disabled
+INFO: Installing Rust toolchain: 1.93.1
+INFO: Building rhttp for aarch64-linux-android
+INFO: Installing Rust target: i686-linux-android
+INFO: Building rhttp for i686-linux-android
+INFO: Building rhttp for x86_64-linux-android
+Resolving dependencies...
+Downloading packages...
++ adaptive_number 1.0.0
++ args 2.4.2 (2.7.0 available)
++ async 2.13.1
++ build_tool 1.0.0 from path /home/runner/work/localsend/localsend/app/rust_builder/cargokit/gradle/../build_tool
++ collection 1.18.0 (1.19.1 available)
++ convert 3.1.1 (3.1.2 available)
++ crypto 3.0.3 (3.0.7 available)
++ ed25519_edwards 0.3.1
++ fixnum 1.1.1
++ github 9.17.0 (9.25.1 available)
++ hex 0.2.0
++ http 1.1.0 (1.6.0 available)
++ http_parser 4.0.2 (4.1.2 available)
++ json_annotation 4.12.0
++ logging 1.2.0 (1.3.0 available)
++ meta 1.18.3
++ path 1.8.0 (1.9.1 available)
++ petitparser 5.4.0 (7.0.2 available)
++ source_span 1.10.0 (1.10.2 available)
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ toml 0.14.0 (0.18.0 available)
++ typed_data 1.4.0
++ version 3.0.0 (3.0.2 available)
++ yaml 3.1.2 (3.1.3 available)
+Changed 25 dependencies!
+14 packages have newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+Compiling bin/build_tool_runner.dart to kernel file bin/build_tool_runner.dill.
+INFO: Precompiled binaries are disabled
+INFO: Building rust_lib_localsend_app for aarch64-linux-android
+INFO: Installing Rust target: i686-linux-android
+INFO: Building rust_lib_localsend_app for i686-linux-android
+INFO: Installing Rust target: x86_64-linux-android
+INFO: Building rust_lib_localsend_app for x86_64-linux-android
+Running Gradle task 'assembleDebug'...                            940.1s
+✓ Built build/app/outputs/flutter-apk/app-debug.apk
+0s
+Run actions/upload-artifact@v4
+Warning: No files were found with the provided path: app/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk. No artifacts will be uploaded.
+0s
+1s
+Run softprops/action-gh-release@v2
+🤔 Pattern 'app/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk' does not match any files.
+👩‍🏭 Creating new GitHub release for tag debug-v1.17.0+58-5...
+⚠️ GitHub release failed with status: 403
+{"message":"Resource not accessible by integration","documentation_url":"https://docs.github.com/rest/releases/releases#create-a-release","status":"403"}
+Skip retry — your GitHub token/PAT does not have the required permission to create a release
+⚠️ Unexpected error fetching GitHub release for tag refs/heads/main: HttpError: Resource not accessible by integration - https://docs.github.com/rest/releases/releases#create-a-release
+Error: Resource not accessible by integration - https://docs.github.com/rest/releases/releases#create-a-release
+0s
+0s
+0s
+0s
+0s

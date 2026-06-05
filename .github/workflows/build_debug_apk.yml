@@ -12,6 +12,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -22,7 +24,6 @@ jobs:
           WORKSPACE="${{ github.workspace }}"
           CORE_DEST="$WORKSPACE/core"
 
-          # Already present (e.g. cached layer) — skip
           if [ -f "$CORE_DEST/Cargo.toml" ]; then
             echo "core/Cargo.toml already exists — skipping fetch."
             exit 0
@@ -31,7 +32,6 @@ jobs:
           echo "Cloning upstream localsend repo to /tmp/ls-upstream ..."
           git clone --depth 1 https://github.com/localsend/localsend.git /tmp/ls-upstream
 
-          # Locate core/Cargo.toml anywhere in the cloned repo
           CORE_SRC=$(find /tmp/ls-upstream -maxdepth 3 -name "Cargo.toml" \
             -path "*/core/Cargo.toml" | head -1 | xargs -I{} dirname {})
 
@@ -45,7 +45,6 @@ jobs:
           cp -r "$CORE_SRC" "$CORE_DEST"
           rm -rf /tmp/ls-upstream
 
-          # Verify
           if [ ! -f "$CORE_DEST/Cargo.toml" ]; then
             echo "ERROR: core/Cargo.toml still missing after copy!"
             exit 1
@@ -88,11 +87,14 @@ jobs:
         working-directory: app
         run: flutter build apk --debug --target-platform android-arm64
 
+      - name: List APK outputs
+        run: find app/build/app/outputs/flutter-apk -name "*.apk" 2>/dev/null || echo "No APKs found"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: debug-arm64-v8a
-          path: app/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          path: app/build/app/outputs/flutter-apk/*.apk
           retention-days: 7
 
       - name: Get version
@@ -119,7 +121,7 @@ jobs:
 
             ---
             > ⚠️ This is a **debug** build intended for testing only.
-          files: app/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          files: app/build/app/outputs/flutter-apk/*.apk
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -65,6 +65,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -75,7 +77,6 @@ jobs:
           WORKSPACE="${{ github.workspace }}"
           CORE_DEST="$WORKSPACE/core"
 
-          # Already present — skip
           if [ -f "$CORE_DEST/Cargo.toml" ]; then
             echo "core/Cargo.toml already exists — skipping fetch."
             exit 0
@@ -84,7 +85,6 @@ jobs:
           echo "Cloning upstream localsend repo to /tmp/ls-upstream ..."
           git clone --depth 1 https://github.com/localsend/localsend.git /tmp/ls-upstream
 
-          # Locate core/Cargo.toml anywhere in the cloned repo
           CORE_SRC=$(find /tmp/ls-upstream -maxdepth 3 -name "Cargo.toml" \
             -path "*/core/Cargo.toml" | head -1 | xargs -I{} dirname {})
 
@@ -98,7 +98,6 @@ jobs:
           cp -r "$CORE_SRC" "$CORE_DEST"
           rm -rf /tmp/ls-upstream
 
-          # Verify
           if [ ! -f "$CORE_DEST/Cargo.toml" ]; then
             echo "ERROR: core/Cargo.toml still missing after copy!"
             exit 1
@@ -133,46 +132,35 @@ jobs:
           key: cargo-android-arm64-${{ hashFiles('app/rust/Cargo.lock') }}
           restore-keys: cargo-android-arm64-
 
-      - name: Decode & place keystore
+      - name: Decode keystore & write key.properties
         run: |
-          echo "${{ env.KEYSTORE_BASE64 }}" | tr -d ' \n' | base64 --decode > ${{ github.workspace }}/my-release-key.jks
+          KEYSTORE_PATH="${{ github.workspace }}/my-release-key.jks"
+          echo "${{ env.KEYSTORE_BASE64 }}" | tr -d ' \n' | base64 --decode > "$KEYSTORE_PATH"
+          cat > "${{ github.workspace }}/app/android/key.properties" <<EOF
+          storePassword=${{ env.STORE_PASSWORD }}
+          keyPassword=${{ env.KEY_PASSWORD }}
+          keyAlias=${{ env.KEY_ALIAS }}
+          storeFile=$KEYSTORE_PATH
+          EOF
+          echo "key.properties written:"
+          cat "${{ github.workspace }}/app/android/key.properties"
 
       - name: Flutter pub get
         working-directory: app
         run: flutter pub get
 
-      - name: Build release APK (arm64-v8a only)
+      - name: Build release APK (arm64-v8a)
         working-directory: app
-        run: |
-          flutter build apk --release --target-platform android-arm64 \
-            --dart-define=FLUTTER_BUILD_NAME=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1) \
-            --dart-define=FLUTTER_BUILD_NUMBER=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f2)
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/my-release-key.jks
-          KEY_ALIAS: ${{ env.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ env.STORE_PASSWORD }}
+        run: flutter build apk --release --target-platform android-arm64
 
-      - name: Sign APK
-        id: sign
-        uses: kevin-david/zipalign-sign-android-release@v2
-        with:
-          releaseDirectory: app/build/app/outputs/flutter-apk
-          signingKeyBase64: ${{ env.KEYSTORE_BASE64 }}
-          keyStorePassword: ${{ env.STORE_PASSWORD }}
-          keyAlias: ${{ env.KEY_ALIAS }}
-          keyPassword: ${{ env.KEY_PASSWORD }}
-
-      - name: Rename signed APK
-        run: |
-          cp "${{ steps.sign.outputs.signedReleaseFile }}" \
-             app/build/app/outputs/flutter-apk/app-arm64-v8a-release-signed.apk
+      - name: List APK outputs
+        run: find app/build/app/outputs/flutter-apk -name "*.apk" 2>/dev/null || echo "No APKs found"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-arm64-v8a
-          path: app/build/app/outputs/flutter-apk/app-arm64-v8a-release-signed.apk
+          path: app/build/app/outputs/flutter-apk/*.apk
           retention-days: 30
 
       - name: Get version
@@ -180,7 +168,6 @@ jobs:
         run: |
           VERSION=$(grep '^version:' app/pubspec.yaml | awk '{print $2}' | tr -d "'\"")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          # Use git tag if triggered by tag push, otherwise generate one
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${{ github.ref_name }}"
           else
@@ -211,7 +198,7 @@ jobs:
             3. Open the APK to install
 
             > ✅ This is a **signed release** build ready for distribution.
-          files: app/build/app/outputs/flutter-apk/app-arm64-v8a-release-signed.apk
+          files: app/build/app/outputs/flutter-apk/*.apk
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
