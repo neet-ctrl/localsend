@@ -1,0 +1,610 @@
+import 'package:common/model/device.dart';
+import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
+import 'package:localsend_app/model/hub/hub_call_state.dart';
+import 'package:localsend_app/pages/hub/hub_chat_page.dart';
+import 'package:localsend_app/pages/hub/hub_remote_files_page.dart';
+import 'package:localsend_app/pages/hub/hub_video_call_page.dart';
+import 'package:localsend_app/pages/hub/hub_voice_call_page.dart';
+import 'package:localsend_app/provider/hub/hub_call_provider.dart';
+import 'package:localsend_app/provider/hub/hub_chat_provider.dart';
+import 'package:localsend_app/provider/hub/hub_files_provider.dart';
+import 'package:localsend_app/model/state/nearby_devices_state.dart';
+import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
+import 'package:localsend_app/provider/network/scan_facade.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:refena_flutter/refena_flutter.dart';
+import 'package:routerino/routerino.dart';
+
+class CommunicationHubTab extends StatefulWidget {
+  const CommunicationHubTab({super.key});
+
+  @override
+  State<CommunicationHubTab> createState() => _CommunicationHubTabState();
+}
+
+class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
+  bool _permissionsGranted = false;
+  bool _permissionsChecked = false;
+  bool _checkingPermissions = false;
+  Map<Permission, bool> _permissionStatus = {};
+
+  final List<Permission> _requiredPermissions = [
+    Permission.microphone,
+    Permission.camera,
+    if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) Permission.notification,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPermissions();
+    });
+  }
+
+  Future<void> _checkPermissions() async {
+    setState(() => _checkingPermissions = true);
+    final statuses = <Permission, bool>{};
+    bool allGranted = true;
+    for (final p in _requiredPermissions) {
+      try {
+        final status = await p.status;
+        statuses[p] = status.isGranted;
+        if (!status.isGranted) allGranted = false;
+      } catch (_) {
+        statuses[p] = true;
+      }
+    }
+    setState(() {
+      _permissionStatus = statuses;
+      _permissionsGranted = allGranted;
+      _permissionsChecked = true;
+      _checkingPermissions = false;
+    });
+  }
+
+  Future<void> _requestPermissions() async {
+    setState(() => _checkingPermissions = true);
+    final statuses = await _requiredPermissions.request();
+    final map = <Permission, bool>{};
+    bool allGranted = true;
+    for (final p in _requiredPermissions) {
+      final granted = statuses[p]?.isGranted ?? true;
+      map[p] = granted;
+      if (!granted) allGranted = false;
+    }
+    setState(() {
+      _permissionStatus = map;
+      _permissionsGranted = allGranted;
+      _checkingPermissions = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final nearbyState = context.watch(nearbyDevicesProvider);
+    final chatState = context.watch(hubChatProvider);
+    final callState = context.watch(hubCallProvider);
+
+    if (callState.status == HubCallStatus.incoming) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          context.push(() => const HubVoiceCallPage());
+        }
+      });
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: !_permissionsChecked
+          ? const Center(child: CircularProgressIndicator(color: kAccentCyan))
+          : !_permissionsGranted
+          ? _buildPermissionsScreen(isDark)
+          : _buildHubContent(context, isDark, nearbyState, chatState),
+    );
+  }
+
+  Widget _buildPermissionsScreen(bool isDark) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A5C), Color(0xFF0D1E35)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                border: Border.all(color: kAccentCyan.withValues(alpha: 0.4), width: 1.5),
+                boxShadow: [BoxShadow(color: kAccentCyan.withValues(alpha: 0.2), blurRadius: 24)],
+              ),
+              child: const Icon(Icons.security_rounded, size: 48, color: kAccentCyan),
+            ),
+            const SizedBox(height: 24),
+            ShaderMask(
+              shaderCallback: (b) => const LinearGradient(colors: [kAccentCyan, Color(0xFF00B8D9)]).createShader(b),
+              child: const Text(
+                'Permissions Required',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Communication Hub needs the following permissions for calls, messaging, and file access.',
+              style: TextStyle(
+                color: isDark ? const Color(0xFF8899BB) : const Color(0xFF6B7FA3),
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            ..._requiredPermissions.map((p) => _buildPermissionRow(p, isDark)),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _checkingPermissions ? null : _requestPermissions,
+                icon: _checkingPermissions
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Icon(Icons.check_circle_outline_rounded),
+                label: const Text('Grant All Permissions'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: kAccentCyan,
+                  foregroundColor: Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => setState(() => _permissionsGranted = true),
+              child: const Text('Continue Anyway', style: TextStyle(color: kAccentCyan)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPermissionRow(Permission permission, bool isDark) {
+    final granted = _permissionStatus[permission] ?? false;
+    final label = _permissionLabel(permission);
+    final icon = _permissionIcon(permission);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            colors: isDark ? [const Color(0xFF1A2235), const Color(0xFF111827)] : [Colors.white, const Color(0xFFF0F4FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(
+            color: granted ? kAccentCyan.withValues(alpha: 0.4) : (isDark ? kGlassBorder : const Color(0x1A000000)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: granted ? kAccentCyan : Colors.grey, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black))),
+            Icon(
+              granted ? Icons.check_circle_rounded : Icons.cancel_rounded,
+              color: granted ? kAccentCyan : Colors.red.withValues(alpha: 0.7),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _permissionLabel(Permission p) {
+    if (p == Permission.microphone) return 'Microphone — Voice & Video Calls';
+    if (p == Permission.camera) return 'Camera — Video Calls';
+    if (p == Permission.notification) return 'Notifications — Incoming Calls & Messages';
+    return p.toString();
+  }
+
+  IconData _permissionIcon(Permission p) {
+    if (p == Permission.microphone) return Icons.mic_rounded;
+    if (p == Permission.camera) return Icons.videocam_rounded;
+    if (p == Permission.notification) return Icons.notifications_rounded;
+    return Icons.lock_rounded;
+  }
+
+  Widget _buildHubContent(BuildContext context, bool isDark, NearbyDevicesState nearbyState, HubChatState chatState) {
+    final allDevices = nearbyState.devices.values.toList();
+
+    return Column(
+      children: [
+        _buildDashboardHeader(isDark, allDevices, chatState),
+        Expanded(
+          child: allDevices.isEmpty
+              ? _buildEmptyState(isDark)
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  itemCount: allDevices.length,
+                  itemBuilder: (ctx, i) => _DeviceCard(
+                    device: allDevices[i],
+                    unreadCount: chatState.unreadCount(allDevices[i].fingerprint),
+                    isDark: isDark,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDashboardHeader(bool isDark, List<Device> devices, HubChatState chatState) {
+    final totalUnread = devices.fold<int>(0, (sum, d) => sum + chatState.unreadCount(d.fingerprint));
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ShaderMask(
+            shaderCallback: (b) => const LinearGradient(colors: [kAccentCyan, Color(0xFF00B8D9)]).createShader(b),
+            child: const Text(
+              'Communication Hub',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Offline LAN • ${devices.length} device${devices.length != 1 ? 's' : ''} nearby',
+            style: TextStyle(color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4), fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _StatCard(icon: Icons.devices_rounded, label: 'Devices', value: '${devices.length}', isDark: isDark)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatCard(
+                  icon: Icons.chat_bubble_rounded,
+                  label: 'Unread',
+                  value: '$totalUnread',
+                  isDark: isDark,
+                  accent: totalUnread > 0 ? kAccentCyan : null,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatCard(icon: Icons.wifi_rounded, label: 'LAN', value: 'Active', isDark: isDark, accent: kAccentCyan),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Nearby Devices',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => ref.global.dispatchAsync(StartSmartScan(forceLegacy: false)),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
+                    color: kAccentCyan.withValues(alpha: 0.08),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh_rounded, size: 14, color: kAccentCyan),
+                      SizedBox(width: 4),
+                      Text('Scan', style: TextStyle(color: kAccentCyan, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(colors: [Color(0xFF1A2235), Color(0xFF111827)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              border: Border.all(color: kGlassBorder, width: 1),
+            ),
+            child: Icon(Icons.radar_rounded, size: 56, color: kAccentCyan.withValues(alpha: 0.6)),
+          ),
+          const SizedBox(height: 20),
+          Text('No Devices Found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+          const SizedBox(height: 8),
+          Text(
+            'Make sure other devices have LocalSend open\nand are on the same network.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4), fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () => ref.global.dispatchAsync(StartSmartScan(forceLegacy: false)),
+            icon: const Icon(Icons.search_rounded),
+            label: const Text('Scan Network'),
+            style: FilledButton.styleFrom(backgroundColor: kAccentCyan, foregroundColor: Colors.black),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isDark;
+  final Color? accent;
+
+  const _StatCard({required this.icon, required this.label, required this.value, required this.isDark, this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: isDark ? [const Color(0xFF1A2235), const Color(0xFF111827)] : [Colors.white, const Color(0xFFF0F4FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: accent ?? (isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4))),
+          const SizedBox(height: 6),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+          Text(label, style: TextStyle(fontSize: 10, color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4))),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceCard extends StatelessWidget {
+  final Device device;
+  final int unreadCount;
+  final bool isDark;
+
+  const _DeviceCard({required this.device, required this.unreadCount, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            colors: isDark ? [const Color(0xFF1A2235), const Color(0xFF111827)] : [Colors.white, const Color(0xFFF0F4FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: isDark ? kGlassBorder : const Color(0x1A000000)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08), blurRadius: 16, offset: const Offset(0, 6))],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  _buildDeviceIcon(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                device.alias,
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (unreadCount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  color: kAccentCyan,
+                                ),
+                                child: Text('$unreadCount', style: const TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _deviceTypeLabel(device.deviceType),
+                          style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4)),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF00E676)),
+                            ),
+                            const SizedBox(width: 4),
+                            Text('Online', style: const TextStyle(fontSize: 11, color: Color(0xFF00E676))),
+                            const SizedBox(width: 12),
+                            Text(device.ip ?? '', style: TextStyle(fontSize: 11, color: isDark ? const Color(0xFF4A5568) : const Color(0xFFB0BEC5))),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: _ActionButton(icon: Icons.mic_rounded, label: 'Voice', color: const Color(0xFF00C853), onTap: () => _startVoiceCall(context))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _ActionButton(icon: Icons.videocam_rounded, label: 'Video', color: const Color(0xFF2979FF), onTap: () => _startVideoCall(context))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _ActionButton(icon: Icons.chat_bubble_rounded, label: 'Chat', color: kAccentCyan, onTap: () => _openChat(context), badge: unreadCount)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _ActionButton(icon: Icons.folder_open_rounded, label: 'Files', color: kAccentPurple, onTap: () => _openFiles(context))),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceIcon() {
+    final icon = _deviceIcon(device.deviceType);
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(colors: [Color(0xFF1E3A5C), Color(0xFF0D1E35)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        border: Border.all(color: kAccentCyan.withValues(alpha: 0.3), width: 1.5),
+        boxShadow: [BoxShadow(color: kAccentCyan.withValues(alpha: 0.15), blurRadius: 12)],
+      ),
+      child: Icon(icon, color: kAccentCyan, size: 24),
+    );
+  }
+
+  IconData _deviceIcon(DeviceType type) {
+    switch (type) {
+      case DeviceType.mobile:
+        return Icons.phone_android_rounded;
+      case DeviceType.desktop:
+        return Icons.computer_rounded;
+      case DeviceType.web:
+        return Icons.language_rounded;
+      case DeviceType.headless:
+        return Icons.dns_rounded;
+      case DeviceType.server:
+        return Icons.storage_rounded;
+    }
+  }
+
+  String _deviceTypeLabel(DeviceType type) {
+    switch (type) {
+      case DeviceType.mobile:
+        return 'Mobile Device';
+      case DeviceType.desktop:
+        return 'Desktop / Laptop';
+      case DeviceType.web:
+        return 'Web Browser';
+      case DeviceType.headless:
+        return 'Headless Server';
+      case DeviceType.server:
+        return 'Server';
+    }
+  }
+
+  void _startVoiceCall(BuildContext context) {
+    context.read(hubCallProvider.notifier).startCall(device, HubCallType.voice);
+    context.push(() => const HubVoiceCallPage());
+  }
+
+  void _startVideoCall(BuildContext context) {
+    context.read(hubCallProvider.notifier).startCall(device, HubCallType.video);
+    context.push(() => const HubVideoCallPage());
+  }
+
+  void _openChat(BuildContext context) {
+    context.push(() => HubChatPage(device: device));
+  }
+
+  void _openFiles(BuildContext context) {
+    context.read(hubFilesProvider.notifier).openDevice(device);
+    context.push(() => HubRemoteFilesPage(device: device));
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final int badge;
+
+  const _ActionButton({required this.icon, required this.label, required this.color, required this.onTap, this.badge = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: color.withValues(alpha: 0.12),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(height: 4),
+                Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+          if (badge > 0)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: const BoxDecoration(shape: BoxShape.circle, color: kAccentCyan),
+                child: Center(child: Text('$badge', style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold))),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,2 +1,4 @@
 - [LocalSend Glassmorphic Design System](localsend-design.md) — deep navy/neon glassmorphic redesign; every page, dialog, and widget rewritten; all legacy AlertDialog/colorScheme.warning patterns removed.
 - [Flutter 3.35 / refena_flutter-3.1.0 API Compat](flutter-compat.md) — known removed/missing params that cause build failures in the CI environment.
+- [Refena StatelessWidget ref access](refena-stateless-ref.md) — use context.read()/context.watch() not `with Refena` on StatelessWidget; Notifier has no overridable dispose().
+- [Communication Hub feature](communication-hub.md) — full feature overview: files, routes, providers, UI pages, and key gotchas.
