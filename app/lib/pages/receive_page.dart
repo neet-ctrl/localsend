@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:common/model/device.dart';
 import 'package:common/model/dto/file_dto.dart';
@@ -28,6 +27,8 @@ import 'package:url_launcher/url_launcher.dart';
 class ReceivePageVm {
   final SessionStatus? status;
   final Device sender;
+
+  /// Show hashtag and device model.
   final bool showSenderInfo;
   final List<FileDto> files;
   final String? message;
@@ -73,7 +74,9 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
     );
 
     if (vm.status == null && vm.message == null) {
-      return const Scaffold(body: SizedBox());
+      return const Scaffold(
+        body: SizedBox(),
+      );
     }
 
     final senderFavoriteEntry = ref.watch(favoritesProvider.select((state) => state.findDevice(vm.sender)));
@@ -90,182 +93,153 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
       builder: (context, vm) {
         return PopScope(
           onPopInvokedWithResult: (didPop, result) {
-            if (didPop) vm.onDecline();
+            if (didPop) {
+              vm.onDecline();
+            }
           },
           canPop: true,
           child: Scaffold(
-            backgroundColor: kBgDark,
-            body: Container(
-              decoration: const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0, -0.3),
-                  radius: 1.2,
-                  colors: [Color(0xFF0D1A2E), kBgDark],
-                ),
-              ),
-              child: SafeArea(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: ResponsiveListView.defaultMaxWidth),
-                    child: Builder(
-                      builder: (context) {
-                        final height = MediaQuery.of(context).size.height;
-                        final smallUi = vm.message != null && height < 600;
-                        return Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: smallUi ? 20 : 30),
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    // Device icon with glow
-                                    if (vm.showSenderInfo && !smallUi)
-                                      Padding(
-                                        padding: const EdgeInsets.only(bottom: 16),
-                                        child: _GlowingDeviceIcon(vm.sender.deviceType.icon),
-                                      ),
-
-                                    // Sender name
-                                    Builder(
-                                      builder: (context) {
-                                        final alias = senderFavoriteEntry?.alias ?? vm.sender.alias;
-                                        if (alias.isEmpty) {
-                                          return Text('', style: TextStyle(fontSize: smallUi ? 32 : 48));
-                                        }
-                                        return FittedBox(
-                                          child: ShaderMask(
-                                            shaderCallback: (bounds) => const LinearGradient(
-                                              colors: [Colors.white, Color(0xFFCCEEFF)],
-                                            ).createShader(bounds),
-                                            child: Text(
-                                              alias,
-                                              style: TextStyle(
-                                                fontSize: smallUi ? 32 : 48,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                        );
-                                      },
+            body: SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: ResponsiveListView.defaultMaxWidth),
+                  child: Builder(
+                    builder: (context) {
+                      final height = MediaQuery.of(context).size.height;
+                      final smallUi = vm.message != null && height < 600;
+                      return Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: smallUi ? 20 : 30),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (vm.showSenderInfo && !smallUi)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: Icon(vm.sender.deviceType.icon, size: 64),
                                     ),
-
-                                    // IP / model badges
-                                    if (vm.showSenderInfo) ...[
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          GestureDetector(
-                                            onTap: () => setState(() => _showFullIp = !_showFullIp),
-                                            child: DeviceBadge(
-                                              backgroundColor: kAccentCyan.withOpacity(0.12),
-                                              foregroundColor: kAccentCyan,
-                                              label: switch (vm.sender.ip) {
-                                                String ip => _showFullIp ? ip : '#${ip.visualId}',
-                                                null => 'WebRTC',
-                                              },
-                                            ),
+                                  Builder(
+                                    builder: (context) {
+                                      final alias = senderFavoriteEntry?.alias ?? vm.sender.alias;
+                                      if (alias.isEmpty) {
+                                        return Text('', style: TextStyle(fontSize: smallUi ? 32 : 48));
+                                      }
+                                      return FittedBox(
+                                        child: Text(
+                                          alias,
+                                          style: TextStyle(fontSize: smallUi ? 32 : 48),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  if (vm.showSenderInfo) ...[
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              _showFullIp = !_showFullIp;
+                                            });
+                                          },
+                                          child: DeviceBadge(
+                                            backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                                            foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
+                                            label: switch (vm.sender.ip) {
+                                              String ip => _showFullIp ? ip : '#${ip.visualId}',
+                                              null => 'WebRTC',
+                                            },
                                           ),
-                                          if (vm.sender.deviceModel != null) ...[
-                                            const SizedBox(width: 10),
-                                            DeviceBadge(
-                                              backgroundColor: kAccentPurple.withOpacity(0.12),
-                                              foregroundColor: kAccentPurple,
-                                              label: vm.sender.deviceModel!,
-                                            ),
-                                          ],
+                                        ),
+                                        if (vm.sender.deviceModel != null) ...[
+                                          const SizedBox(width: 10),
+                                          DeviceBadge(
+                                            backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                                            foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
+                                            label: vm.sender.deviceModel!,
+                                          ),
                                         ],
-                                      ),
-                                    ],
-
-                                    const SizedBox(height: 40),
-
-                                    // Sub-title
-                                    Text(
-                                      vm.message != null
-                                          ? (vm.isLink ? t.receivePage.subTitleLink : t.receivePage.subTitleMessage)
-                                          : t.receivePage.subTitle(n: vm.files.length),
-                                      style: (smallUi ? null : Theme.of(context).textTheme.titleLarge)?.copyWith(
-                                        color: Colors.white.withOpacity(0.7),
-                                      ),
-                                      textAlign: TextAlign.center,
+                                      ],
                                     ),
-
-                                    // Message card
-                                    if (vm.message != null)
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 20),
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(16),
-                                              child: BackdropFilter(
-                                                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                                                child: Container(
-                                                  height: 100,
-                                                  decoration: BoxDecoration(
-                                                    color: kGlassFill,
-                                                    borderRadius: BorderRadius.circular(16),
-                                                    border: Border.all(color: kGlassBorder, width: 1),
-                                                  ),
-                                                  child: SingleChildScrollView(
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.all(12),
-                                                      child: SelectableText(
-                                                        vm.message!,
-                                                        style: const TextStyle(color: Colors.white),
-                                                      ),
-                                                    ),
+                                  ],
+                                  const SizedBox(height: 40),
+                                  Text(
+                                    vm.message != null
+                                        ? (vm.isLink ? t.receivePage.subTitleLink : t.receivePage.subTitleMessage)
+                                        : t.receivePage.subTitle(n: vm.files.length),
+                                    style: smallUi ? null : Theme.of(context).textTheme.titleLarge,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (vm.message != null)
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 20),
+                                          child: SizedBox(
+                                            height: 100,
+                                            child: Card(
+                                              child: SingleChildScrollView(
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(10),
+                                                  child: SelectableText(
+                                                    vm.message!,
                                                   ),
                                                 ),
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(height: 16),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              _NeonOutlineButton(
-                                                label: t.general.copy,
-                                                color: kAccentCyan,
-                                                onPressed: () {
-                                                  unawaited(Clipboard.setData(ClipboardData(text: vm.message!)));
-                                                  if (checkPlatformIsDesktop()) {
-                                                    context.showSnackBar(t.general.copiedToClipboard);
-                                                  }
-                                                  vm.onAccept();
-                                                  context.pop();
-                                                },
-                                              ),
-                                              if (vm.isLink) ...[
-                                                const SizedBox(width: 16),
-                                                _NeonFilledButton(
-                                                  label: t.general.open,
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            ElevatedButton(
+                                              onPressed: () {
+                                                unawaited(
+                                                  Clipboard.setData(ClipboardData(text: vm.message!)),
+                                                );
+                                                if (checkPlatformIsDesktop()) {
+                                                  context.showSnackBar(t.general.copiedToClipboard);
+                                                }
+                                                vm.onAccept();
+                                                context.pop();
+                                              },
+                                              child: Text(t.general.copy),
+                                            ),
+                                            if (vm.isLink)
+                                              Padding(
+                                                padding: const EdgeInsetsDirectional.only(start: 20),
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Theme.of(context).colorScheme.primary,
+                                                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                                  ),
                                                   onPressed: () {
                                                     // ignore: discarded_futures
                                                     launchUrl(Uri.parse(vm.message!), mode: LaunchMode.externalApplication);
                                                     vm.onAccept();
                                                     context.pop();
                                                   },
+                                                  child: Text(t.general.open),
                                                 ),
-                                              ],
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                  ],
-                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                ],
                               ),
-                              _Actions(vm),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            ),
+                            _Actions(vm),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -277,89 +251,22 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
   }
 }
 
-class _GlowingDeviceIcon extends StatelessWidget {
-  final IconData icon;
-  const _GlowingDeviceIcon(this.icon);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: kAccentCyan.withOpacity(0.12),
-        border: Border.all(color: kAccentCyan.withOpacity(0.35), width: 1.5),
-        boxShadow: [
-          BoxShadow(color: kAccentCyan.withOpacity(0.25), blurRadius: 24, spreadRadius: 4),
-        ],
-      ),
-      child: Icon(icon, size: 40, color: kAccentCyan),
-    );
-  }
-}
-
-class _NeonFilledButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onPressed;
-  const _NeonFilledButton({required this.label, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: const LinearGradient(colors: [kAccentCyan, kAccentPurple]),
-        boxShadow: [BoxShadow(color: kAccentCyan.withOpacity(0.35), blurRadius: 14)],
-      ),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        ),
-        onPressed: onPressed,
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-      ),
-    );
-  }
-}
-
-class _NeonOutlineButton extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback onPressed;
-  const _NeonOutlineButton({required this.label, required this.color, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: color,
-        side: BorderSide(color: color.withOpacity(0.5), width: 1.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      ),
-      onPressed: onPressed,
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
 class _Actions extends StatelessWidget {
   final ReceivePageVm vm;
+
   const _Actions(this.vm);
 
   @override
   Widget build(BuildContext context) {
     final selectedFiles = context.watch(selectedReceivingFilesProvider);
+    final colorMode = context.watch(settingsProvider.select((state) => state.colorMode));
 
     if (vm.message != null) {
       return Center(
         child: TextButton.icon(
-          style: TextButton.styleFrom(foregroundColor: Colors.white.withOpacity(0.6)),
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.onSurface,
+          ),
           onPressed: () {
             vm.onAccept();
             context.pop();
@@ -377,17 +284,18 @@ class _Actions extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 20),
             child: Text(
               t.receivePage.canceled,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              style: TextStyle(color: Theme.of(context).colorScheme.warning),
               textAlign: TextAlign.center,
             ),
           ),
           Center(
-            child: _NeonFilledButton(
-              label: t.general.close,
+            child: ElevatedButton.icon(
               onPressed: () {
                 vm.onClose();
                 context.pop();
               },
+              icon: const Icon(Icons.check_circle),
+              label: Text(t.general.close),
             ),
           ),
         ],
@@ -400,30 +308,40 @@ class _Actions extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 20),
           child: TextButton.icon(
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white.withOpacity(0.55),
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
             ),
             onPressed: () async {
               await context.push(() => ReceiveOptionsPage(vm));
             },
-            icon: const Icon(Icons.settings, size: 18),
+            icon: const Icon(Icons.settings),
             label: Text(t.receiveOptionsPage.title),
           ),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _NeonOutlineButton(
-              label: t.general.decline,
-              color: Colors.redAccent,
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                elevation: colorMode == ColorMode.yaru ? 0 : null,
+                backgroundColor: colorMode == ColorMode.yaru ? Theme.of(context).colorScheme.surface : Theme.of(context).colorScheme.error,
+                foregroundColor: colorMode == ColorMode.yaru ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onError,
+              ),
               onPressed: () {
                 vm.onDecline();
                 context.pop();
               },
+              icon: const Icon(Icons.close),
+              label: Text(t.general.decline),
             ),
             const SizedBox(width: 20),
-            _NeonFilledButton(
-              label: t.general.accept,
-              onPressed: selectedFiles.isEmpty ? () {} : () => vm.onAccept(),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              ),
+              onPressed: selectedFiles.isEmpty ? null : () => vm.onAccept(),
+              icon: const Icon(Icons.check_circle),
+              label: Text(t.general.accept),
             ),
           ],
         ),

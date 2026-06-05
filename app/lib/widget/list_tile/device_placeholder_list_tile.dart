@@ -1,6 +1,5 @@
 import 'package:common/model/device.dart';
 import 'package:flutter/material.dart';
-import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/provider/animation_provider.dart';
 import 'package:localsend_app/util/device_type_ext.dart';
 import 'package:localsend_app/widget/device_bage.dart';
@@ -19,7 +18,7 @@ class DevicePlaceholderListTile extends StatelessWidget {
         durationMillis: 3000,
         running: animations,
         children: [
-          ...DeviceType.values.map((d) => Icon(d.icon, size: 46, color: kAccentCyan.withOpacity(0.3))),
+          ...DeviceType.values.map((d) => Icon(d.icon, size: 46)),
         ],
       ),
       title: const Visibility(
@@ -27,6 +26,7 @@ class DevicePlaceholderListTile extends StatelessWidget {
         maintainSize: true,
         maintainAnimation: true,
         maintainState: true,
+        // A workaround to have an implicit height
         child: Text('A', style: TextStyle(fontSize: 20)),
       ),
       subTitle: Wrap(
@@ -34,12 +34,12 @@ class DevicePlaceholderListTile extends StatelessWidget {
         spacing: 10,
         children: [
           DeviceBadge(
-            backgroundColor: kAccentCyan.withOpacity(0.08),
+            backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.5),
             foregroundColor: Colors.transparent,
             label: '       ',
           ),
           DeviceBadge(
-            backgroundColor: kAccentCyan.withOpacity(0.08),
+            backgroundColor: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.5),
             foregroundColor: Colors.transparent,
             label: '              ',
           ),

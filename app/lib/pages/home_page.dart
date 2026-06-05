@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -40,6 +39,9 @@ enum HomeTab {
 
 class HomePage extends StatefulWidget {
   final HomeTab initialTab;
+
+  /// It is important for the initializing step
+  /// because the first init clears the cache
   final bool appStart;
 
   const HomePage({
@@ -58,6 +60,7 @@ class _HomePageState extends State<HomePage> with Refena {
   @override
   void initState() {
     super.initState();
+
     ensureRef((ref) async {
       ref.redux(homePageControllerProvider).dispatch(ChangeTabAction(widget.initialTab));
       await postInit(context, ref, widget.appStart);
@@ -66,39 +69,78 @@ class _HomePageState extends State<HomePage> with Refena {
 
   @override
   Widget build(BuildContext context) {
-    Translations.of(context);
+    Translations.of(context); // rebuild on locale change
     final vm = context.watch(homePageControllerProvider);
 
     return DropTarget(
-      onDragEntered: (_) => setState(() => _dragAndDropIndicator = true),
-      onDragExited: (_) => setState(() => _dragAndDropIndicator = false),
+      onDragEntered: (_) {
+        setState(() {
+          _dragAndDropIndicator = true;
+        });
+      },
+      onDragExited: (_) {
+        setState(() {
+          _dragAndDropIndicator = false;
+        });
+      },
       onDragDone: (event) async {
         if (event.files.length == 1 && Directory(event.files.first.path).existsSync()) {
+          // user dropped a directory
           await ref.redux(selectedSendingFilesProvider).dispatchAsync(AddDirectoryAction(event.files.first.path));
         } else {
-          await ref.redux(selectedSendingFilesProvider).dispatchAsync(
-            AddFilesAction(
-              files: event.files,
-              converter: CrossFileConverters.convertXFile,
-            ),
-          );
+          // user dropped one or more files
+          await ref
+              .redux(selectedSendingFilesProvider)
+              .dispatchAsync(
+                AddFilesAction(
+                  files: event.files,
+                  converter: CrossFileConverters.convertXFile,
+                ),
+              );
         }
         vm.changeTab(HomeTab.send);
       },
       child: ResponsiveBuilder(
         builder: (sizingInformation) {
           return Scaffold(
-            backgroundColor: kBgDark,
             body: Row(
               children: [
                 if (!sizingInformation.isMobile)
                   Stack(
                     children: [
-                      _GlassNavRail(
+                      NavigationRail(
                         selectedIndex: vm.currentTab.index,
                         onDestinationSelected: (index) => vm.changeTab(HomeTab.values[index]),
                         extended: sizingInformation.isDesktop,
+                        backgroundColor: Theme.of(context).cardColorWithElevation,
+                        leading: sizingInformation.isDesktop
+                            ? Column(
+                                children: [
+                                  checkPlatform([TargetPlatform.macOS])
+                                      ? // considered adding some extra space so it looks more natural
+                                        SizedBox(height: 40)
+                                      : SizedBox(height: 20),
+                                  const Text(
+                                    'LocalSend',
+                                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  SizedBox(height: 20),
+                                ],
+                              )
+                            : checkPlatform([TargetPlatform.macOS])
+                            ? SizedBox(
+                                height: 20,
+                              )
+                            : null,
+                        destinations: HomeTab.values.map((tab) {
+                          return NavigationRailDestination(
+                            icon: Icon(tab.icon),
+                            label: Text(tab.label),
+                          );
+                        }).toList(),
                       ),
+                      // makes the top draggable
                       Positioned(
                         top: 0,
                         left: 0,
@@ -121,34 +163,18 @@ class _HomePageState extends State<HomePage> with Refena {
                         ],
                       ),
                       if (_dragAndDropIndicator)
-                        ClipRect(
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: kBgDark.withOpacity(0.85),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ShaderMask(
-                                    shaderCallback: (bounds) => const LinearGradient(
-                                      colors: [kAccentCyan, kAccentPurple],
-                                    ).createShader(bounds),
-                                    child: const Icon(Icons.file_download, size: 128, color: Colors.white),
-                                  ),
-                                  const SizedBox(height: 30),
-                                  Text(
-                                    t.sendTab.placeItems,
-                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).scaffoldBackgroundColor,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.file_download, size: 128),
+                              const SizedBox(height: 30),
+                              Text(t.sendTab.placeItems, style: Theme.of(context).textTheme.titleLarge),
+                            ],
                           ),
                         ),
                     ],
@@ -157,139 +183,16 @@ class _HomePageState extends State<HomePage> with Refena {
               ],
             ),
             bottomNavigationBar: sizingInformation.isMobile
-                ? _GlassBottomNav(
+                ? NavigationBar(
                     selectedIndex: vm.currentTab.index,
                     onDestinationSelected: (index) => vm.changeTab(HomeTab.values[index]),
+                    destinations: HomeTab.values.map((tab) {
+                      return NavigationDestination(icon: Icon(tab.icon), label: tab.label);
+                    }).toList(),
                   )
                 : null,
           );
         },
-      ),
-    );
-  }
-}
-
-class _GlassNavRail extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onDestinationSelected;
-  final bool extended;
-
-  const _GlassNavRail({
-    required this.selectedIndex,
-    required this.onDestinationSelected,
-    required this.extended,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: kGlassFill,
-            border: Border(
-              right: BorderSide(color: kGlassBorder, width: 1),
-            ),
-          ),
-          child: NavigationRail(
-            selectedIndex: selectedIndex,
-            onDestinationSelected: onDestinationSelected,
-            extended: extended,
-            backgroundColor: Colors.transparent,
-            selectedIconTheme: const IconThemeData(color: kAccentCyan, size: 24),
-            unselectedIconTheme: IconThemeData(color: Colors.white.withOpacity(0.45), size: 22),
-            selectedLabelTextStyle: const TextStyle(
-              color: kAccentCyan,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-            unselectedLabelTextStyle: TextStyle(
-              color: Colors.white.withOpacity(0.45),
-              fontSize: 13,
-            ),
-            indicatorColor: kAccentCyan.withOpacity(0.15),
-            leading: extended
-                ? Column(
-                    children: [
-                      checkPlatform([TargetPlatform.macOS])
-                          ? const SizedBox(height: 40)
-                          : const SizedBox(height: 20),
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [kAccentCyan, kAccentPurple],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ).createShader(bounds),
-                        child: const Text(
-                          'LocalSend',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                  )
-                : checkPlatform([TargetPlatform.macOS])
-                ? const SizedBox(height: 20)
-                : null,
-            destinations: HomeTab.values.map((tab) {
-              return NavigationRailDestination(
-                icon: Icon(tab.icon),
-                label: Text(tab.label),
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassBottomNav extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onDestinationSelected;
-
-  const _GlassBottomNav({
-    required this.selectedIndex,
-    required this.onDestinationSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: kGlassFill,
-            border: Border(
-              top: BorderSide(color: kGlassBorder, width: 1),
-            ),
-          ),
-          child: NavigationBar(
-            selectedIndex: selectedIndex,
-            onDestinationSelected: onDestinationSelected,
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            indicatorColor: kAccentCyan.withOpacity(0.18),
-            destinations: HomeTab.values.map((tab) {
-              final isSelected = HomeTab.values[selectedIndex] == tab;
-              return NavigationDestination(
-                icon: Icon(
-                  tab.icon,
-                  color: isSelected ? kAccentCyan : Colors.white.withOpacity(0.45),
-                ),
-                label: tab.label,
-              );
-            }).toList(),
-          ),
-        ),
       ),
     );
   }

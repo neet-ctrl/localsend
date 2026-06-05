@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:common/model/dto/file_dto.dart';
@@ -49,24 +48,30 @@ class ProgressPage extends StatefulWidget {
 
 class _ProgressPageState extends State<ProgressPage> with Refena {
   int _totalBytes = double.maxFinite.toInt();
-  int _lastRemainingTimeUpdate = 0;
+  int _lastRemainingTimeUpdate = 0; // millis since epoch
   String? _remainingTime;
-  List<FileDto> _files = [];
+  List<FileDto> _files = []; // also contains declined files (files without token)
   Set<String> _selectedFiles = {};
   SessionStatus? _lastStatus;
+
+  // If [autoFinish] is enabled, we wait a few seconds before automatically closing the session.
   int _finishCounter = 3;
   Timer? _finishTimer;
   Timer? _wakelockPlusTimer;
+
   bool _advanced = false;
 
   @override
   void initState() {
     super.initState();
+
+    // init
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
         unawaited(WakelockPlus.enable());
       } catch (_) {}
 
+      // Periodically call WakelockPlus.enable() to keep the screen awake
       _wakelockPlusTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
         final finished =
             ref.read(serverProvider)?.session?.files.values.map((e) => e.status).isFinishedOrSkipped ??
@@ -74,9 +79,13 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
             true;
         if (finished) {
           timer.cancel();
-          try { unawaited(WakelockPlus.disable()); } catch (_) {}
+          try {
+            unawaited(WakelockPlus.disable());
+          } catch (_) {}
         } else {
-          try { unawaited(WakelockPlus.enable()); } catch (_) {}
+          try {
+            unawaited(WakelockPlus.enable());
+          } catch (_) {}
         }
       });
 
@@ -91,7 +100,9 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
               timer.cancel();
               _exit(closeSession: true);
             } else {
-              setState(() { _finishCounter--; });
+              setState(() {
+                _finishCounter--;
+              });
             }
           }
         });
@@ -101,20 +112,17 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
         final receiveSession = ref.read(serverProvider)?.session;
         if (receiveSession != null) {
           _files = receiveSession.files.values.map((f) => f.file).toList();
-          _selectedFiles = receiveSession.files.values
-              .where((f) => f.status != FileStatus.skipped)
-              .map((f) => f.file.id)
-              .toSet();
+
+          // We previously used f.token != null here, but this may not work on very fast networks.
+          _selectedFiles = receiveSession.files.values.where((f) => f.status != FileStatus.skipped).map((f) => f.file.id).toSet();
         } else {
           final sendSession = ref.read(sendProvider)[widget.sessionId];
           if (sendSession != null) {
             _files = sendSession.files.values.map((f) => f.file).toList();
-            _selectedFiles = sendSession.files.values
-                .where((f) => f.status != FileStatus.skipped)
-                .map((f) => f.file.id)
-                .toSet();
+            _selectedFiles = sendSession.files.values.where((f) => f.status != FileStatus.skipped).map((f) => f.file.id).toSet();
           }
         }
+
         _totalBytes = _files.where((f) => _selectedFiles.contains(f.id)).fold(0, (prev, curr) => prev + curr.size);
       });
     });
@@ -126,6 +134,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
     final SessionStatus? status = receiveSession?.status ?? sendSession?.status;
     final keepSession = !closeSession && (status == SessionStatus.sending || status == SessionStatus.finishedWithErrors);
     final result = status == null || keepSession || await _askCancelConfirmation(status);
+
     if (result && mounted) {
       // ignore: unawaited_futures
       context.popUntilRoot();
@@ -140,6 +149,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
     if (result) {
       final receiveSession = ref.read(serverProvider)?.session;
       final sendState = ref.read(sendProvider)[widget.sessionId];
+
       if (receiveSession != null) {
         if (receiveSession.status == SessionStatus.sending) {
           ref.notifier(serverProvider).cancelSession();
@@ -163,7 +173,9 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
     _finishTimer?.cancel();
     _wakelockPlusTimer?.cancel();
     TaskbarHelper.clearProgressBar(); // ignore: discarded_futures
-    try { WakelockPlus.disable(); } catch (_) {} // ignore: discarded_futures
+    try {
+      WakelockPlus.disable(); // ignore: discarded_futures
+    } catch (_) {}
   }
 
   @override
@@ -176,10 +188,13 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
 
     final receiveSession = ref.watch(serverProvider.select((s) => s?.session));
     final sendSession = ref.watch(sendProvider)[widget.sessionId];
+
     final SessionState? commonSessionState = receiveSession ?? sendSession;
 
     if (commonSessionState == null) {
-      return Scaffold(backgroundColor: kBgDark, body: Container());
+      return Scaffold(
+        body: Container(),
+      );
     }
 
     final status = commonSessionState.status;
@@ -199,6 +214,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
     final int? speedInBytes;
     if (startTime != null && currBytes >= 500 * 1024) {
       speedInBytes = getFileSpeed(start: startTime, end: endTime ?? DateTime.now().millisecondsSinceEpoch, bytes: currBytes);
+
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - _lastRemainingTimeUpdate >= 1000) {
         _remainingTime = getRemainingTime(bytesPerSeconds: speedInBytes, remainingBytes: _totalBytes - currBytes);
@@ -213,44 +229,39 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
 
     return PopScope(
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop) {
+          // Already popped.
+          // Because the user cannot pop this page, we can safely assume that all sessions are closed if they should be.
+          return;
+        }
         _exit(closeSession: widget.closeSessionOnClose);
       },
       canPop: false,
       child: Scaffold(
-        backgroundColor: kBgDark,
         appBar: widget.showAppBar ? basicLocalSendAppbar(title) : null,
         body: Stack(
           children: [
             ListView.builder(
               padding: EdgeInsets.only(
                 top: MediaQuery.of(context).padding.top + 20,
-                bottom: 160 + getNavBarPadding(context),
+                bottom: 150 + getNavBarPadding(context),
                 left: 15,
-                right: 15,
+                right: 30,
               ),
               itemCount: _files.length + 2,
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  if (widget.showAppBar) return Container();
+                  // title
+                  if (widget.showAppBar) {
+                    return Container();
+                  }
+
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.only(bottom: 5),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [kAccentCyan, kAccentPurple],
-                          ).createShader(bounds),
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
+                        Text(title, style: Theme.of(context).textTheme.titleLarge),
                         if (checkPlatformWithFileSystem() && receiveSession != null)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
@@ -259,15 +270,12 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                                 children: [
                                   TextSpan(
                                     text: '${t.settingsTab.receive.destination}: ',
-                                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
+                                    style: const TextStyle(color: Colors.grey),
                                   ),
                                   TextSpan(
                                     text: receiveSession.destinationDirectory,
                                     style: TextStyle(
-                                      color: checkPlatform([TargetPlatform.iOS])
-                                          ? Colors.white.withOpacity(0.4)
-                                          : kAccentCyan,
-                                      fontSize: 13,
+                                      color: checkPlatform([TargetPlatform.iOS]) ? Colors.grey : Theme.of(context).colorScheme.primary,
                                     ),
                                     recognizer: checkPlatform([TargetPlatform.iOS])
                                         ? null
@@ -286,19 +294,18 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                 }
 
                 if (index == 1) {
+                  // error card
                   final errorMessage = sendSession?.errorMessage;
-                  if (errorMessage == null) return Container();
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: SelectableText(
-                      errorMessage,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
-                    ),
-                  );
+                  if (errorMessage == null) {
+                    return Container();
+                  }
+
+                  return SelectableText(errorMessage, style: TextStyle(color: Theme.of(context).colorScheme.warning));
                 }
 
                 final file = _files[index - 2];
                 final String fileName = receiveSession?.files[file.id]?.desiredName ?? file.fileName;
+
                 final fileStatus = fileStatusMap[file.id]!;
                 final savedToGallery = receiveSession?.files[file.id]?.savedToGallery ?? false;
 
@@ -332,254 +339,201 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
 
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: InkWell(
-                        splashColor: Colors.transparent,
-                        splashFactory: NoSplash.splashFactory,
-                        highlightColor: kAccentCyan.withOpacity(0.05),
-                        hoverColor: Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: filePath != null && receiveSession != null
-                            ? () async => openFile(context, file.fileType, filePath!)
-                            : null,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: kGlassFill,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: kGlassBorder, width: 1),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SmartFileThumbnail(
-                                  bytes: thumbnail,
-                                  asset: asset,
-                                  path: filePath,
-                                  fileType: file.fileType,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              fileName,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                height: 1,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.fade,
-                                              softWrap: false,
-                                            ),
-                                          ),
-                                          Text(
-                                            ' (${file.size.asReadableFileSize})',
-                                            style: TextStyle(fontSize: 12, height: 1, color: Colors.white.withOpacity(0.4)),
-                                          ),
-                                        ],
+                  child: InkWell(
+                    splashColor: Colors.transparent,
+                    splashFactory: NoSplash.splashFactory,
+                    highlightColor: Colors.transparent,
+                    hoverColor: Colors.transparent,
+                    onTap: filePath != null && receiveSession != null ? () async => openFile(context, file.fileType, filePath!) : null,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SmartFileThumbnail(
+                          bytes: thumbnail,
+                          asset: asset,
+                          path: filePath,
+                          fileType: file.fileType,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      fileName,
+                                      style: const TextStyle(fontSize: 16, height: 1),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.fade,
+                                      softWrap: false,
+                                    ),
+                                  ),
+                                  Text(' (${file.size.asReadableFileSize})', style: const TextStyle(fontSize: 16, height: 1)),
+                                ],
+                              ),
+                              const SizedBox(height: 5),
+                              if (fileStatus == FileStatus.sending)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 5),
+                                  child: CustomProgressBar(
+                                    progress: progressNotifier.getProgress(sessionId: widget.sessionId, fileId: file.id),
+                                  ),
+                                )
+                              else
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        savedToGallery ? t.progressPage.savedToGallery : fileStatus.label,
+                                        style: TextStyle(color: fileStatus.getColor(context), height: 1),
                                       ),
-                                      const SizedBox(height: 6),
-                                      if (fileStatus == FileStatus.sending)
-                                        CustomProgressBar(
-                                          progress: progressNotifier.getProgress(sessionId: widget.sessionId, fileId: file.id),
-                                        )
-                                      else
-                                        Row(
-                                          children: [
-                                            Flexible(
-                                              child: Text(
-                                                savedToGallery ? t.progressPage.savedToGallery : fileStatus.label,
-                                                style: TextStyle(color: fileStatus.getColor(context), height: 1, fontSize: 12),
-                                              ),
-                                            ),
-                                            if (errorMessage != null) ...[
-                                              const SizedBox(width: 5),
-                                              InkWell(
-                                                onTap: () async {
-                                                  await showDialog(
-                                                    context: context,
-                                                    builder: (_) => ErrorDialog(error: errorMessage!),
-                                                  );
-                                                },
-                                                child: Padding(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                                                  child: const Icon(Icons.info, color: Colors.orangeAccent, size: 16),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
+                                    ),
+                                    if (errorMessage != null) ...[
+                                      const SizedBox(width: 5),
+                                      InkWell(
+                                        onTap: () async {
+                                          await showDialog(
+                                            context: context,
+                                            builder: (_) => ErrorDialog(error: errorMessage!),
+                                          );
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                                          child: Icon(Icons.info, color: Theme.of(context).colorScheme.warning, size: 20),
                                         ),
+                                      ),
                                     ],
-                                  ),
+                                  ],
                                 ),
-                                if (sendSession != null && fileStatus == FileStatus.failed)
-                                  IconButton(
-                                    icon: const Icon(Icons.refresh, color: kAccentCyan, size: 20),
-                                    onPressed: () async {
-                                      await ref.notifier(sendProvider).sendFile(
-                                        sessionId: widget.sessionId,
-                                        isolateIndex: 0,
-                                        file: sendSession.files[file.id]!,
-                                        isRetry: true,
-                                      );
-                                    },
-                                  ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
-                      ),
+                        if (sendSession != null && fileStatus == FileStatus.failed)
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            onPressed: () async {
+                              await ref
+                                  .notifier(sendProvider)
+                                  .sendFile(
+                                    sessionId: widget.sessionId,
+                                    isolateIndex: 0,
+                                    file: sendSession.files[file.id]!,
+                                    isRetry: true,
+                                  );
+                            },
+                          ),
+                      ],
                     ),
                   ),
                 );
               },
             ),
-
-            // Bottom glass panel
             SafeArea(
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: kGlassFill,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: kGlassBorder, width: 1),
-                          boxShadow: [
-                            BoxShadow(
-                              color: kAccentCyan.withOpacity(0.08),
-                              blurRadius: 30,
-                              spreadRadius: 2,
+                  padding: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 15, right: 15, bottom: 5, top: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            status.getLabel(
+                              remainingTime: _remainingTime ?? '-',
                             ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8, top: 14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                status.getLabel(remainingTime: _remainingTime ?? '-'),
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TweenAnimationBuilder(
-                                tween: Tween<double>(begin: 0, end: _totalBytes == 0 ? 0 : currBytes / _totalBytes),
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOut,
-                                builder: (context, value, child) => CustomProgressBar(progress: value, borderRadius: 6),
-                              ),
-                              AnimatedCrossFade(
-                                crossFadeState: _advanced ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                                duration: const Duration(milliseconds: 200),
-                                alignment: Alignment.topLeft,
-                                firstChild: Container(),
-                                secondChild: Padding(
-                                  padding: const EdgeInsets.only(top: 10, bottom: 4),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t.progressPage.total.count(curr: finishedCount, n: _selectedFiles.length),
-                                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
-                                      ),
-                                      Text(
-                                        t.progressPage.total.size(
-                                          curr: currBytes.asReadableFileSize,
-                                          n: _totalBytes == double.maxFinite.toInt() ? '-' : _totalBytes.asReadableFileSize,
-                                        ),
-                                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
-                                      ),
-                                      if (speedInBytes != null)
-                                        Text(
-                                          t.progressPage.total.speed(speed: speedInBytes.asReadableFileSize),
-                                          style: const TextStyle(color: kAccentCyan, fontSize: 13, fontWeight: FontWeight.w600),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
+                            style: const TextStyle(fontSize: 20),
+                          ),
+                          const SizedBox(height: 5),
+                          TweenAnimationBuilder(
+                            tween: Tween<double>(begin: 0, end: _totalBytes == 0 ? 0 : currBytes / _totalBytes),
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOut,
+                            builder: (context, value, child) {
+                              return CustomProgressBar(
+                                progress: value,
+                                borderRadius: 5,
+                              );
+                            },
+                          ),
+                          AnimatedCrossFade(
+                            crossFadeState: _advanced ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                            duration: const Duration(milliseconds: 200),
+                            alignment: Alignment.topLeft,
+                            firstChild: Container(),
+                            secondChild: Padding(
+                              padding: const EdgeInsets.only(top: 10, bottom: 5),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Colors.white.withOpacity(0.55),
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    ),
-                                    onPressed: () => setState(() => _advanced = !_advanced),
-                                    icon: Icon(_advanced ? Icons.keyboard_arrow_up : Icons.info_outline, size: 18),
-                                    label: Text(_advanced ? t.general.hide : t.general.advanced, style: const TextStyle(fontSize: 13)),
-                                  ),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
-                                      gradient: status == SessionStatus.sending
-                                          ? null
-                                          : const LinearGradient(colors: [kAccentCyan, kAccentPurple]),
-                                      color: status == SessionStatus.sending ? Colors.redAccent.withOpacity(0.14) : null,
-                                      border: status == SessionStatus.sending
-                                          ? Border.all(color: Colors.redAccent.withOpacity(0.35), width: 1)
-                                          : null,
-                                    ),
-                                    child: TextButton.icon(
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                      onPressed: () => _exit(closeSession: true),
-                                      icon: Icon(
-                                        status == SessionStatus.sending ? Icons.close : Icons.check_circle,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        status == SessionStatus.sending
-                                            ? t.general.cancel
-                                            : _finishTimer != null
-                                                ? '${t.general.done} ($_finishCounter)'
-                                                : t.general.done,
-                                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                                      ),
+                                  Text(
+                                    t.progressPage.total.count(
+                                      curr: finishedCount,
+                                      n: _selectedFiles.length,
                                     ),
                                   ),
+                                  Text(
+                                    t.progressPage.total.size(
+                                      curr: currBytes.asReadableFileSize,
+                                      n: _totalBytes == double.maxFinite.toInt() ? '-' : _totalBytes.asReadableFileSize,
+                                    ),
+                                  ),
+                                  if (speedInBytes != null)
+                                    Text(
+                                      t.progressPage.total.speed(
+                                        speed: speedInBytes.asReadableFileSize,
+                                      ),
+                                    ),
                                 ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurface),
+                                onPressed: () {
+                                  setState(() => _advanced = !_advanced);
+                                },
+                                icon: const Icon(Icons.info),
+                                label: Text(_advanced ? t.general.hide : t.general.advanced),
+                              ),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurface),
+                                onPressed: () => _exit(closeSession: true),
+                                icon: Icon(status == SessionStatus.sending ? Icons.close : Icons.check_circle),
+                                label: Text(
+                                  status == SessionStatus.sending
+                                      ? t.general.cancel
+                                      : _finishTimer != null
+                                      ? '${t.general.done} ($_finishCounter)'
+                                      : t.general.done,
+                                ),
                               ),
                             ],
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-
             checkPlatform([TargetPlatform.macOS])
-                ? Positioned(top: 0, left: 0, right: 0, height: 40, child: MoveWindow())
-                : const SizedBox(height: 0, width: 0),
+                ? Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 40,
+                    child: MoveWindow(),
+                  )
+                : SizedBox(),
           ],
         ),
       ),
@@ -595,26 +549,26 @@ extension on FileStatus {
       case FileStatus.skipped:
         return t.general.skipped;
       case FileStatus.sending:
-        return t.progressPage.titleSending;
+        return ''; // progress bar will be showed here
       case FileStatus.failed:
         return t.general.error;
       case FileStatus.finished:
-        return t.general.finished;
+        return t.general.done;
     }
   }
 
   Color getColor(BuildContext context) {
     switch (this) {
       case FileStatus.queue:
-        return Colors.grey;
+        return Theme.of(context).colorScheme.primary;
       case FileStatus.skipped:
         return Colors.grey;
       case FileStatus.sending:
         return Theme.of(context).colorScheme.primary;
       case FileStatus.failed:
-        return Colors.red;
+        return Theme.of(context).colorScheme.warning;
       case FileStatus.finished:
-        return Colors.green;
+        return Theme.of(context).colorScheme.primary;
     }
   }
 }
@@ -623,7 +577,9 @@ extension on SessionStatus {
   String getLabel({required String remainingTime}) {
     switch (this) {
       case SessionStatus.sending:
-        return t.progressPage.total.title.sending(time: remainingTime);
+        return t.progressPage.total.title.sending(
+          time: remainingTime,
+        );
       case SessionStatus.finished:
         return t.general.finished;
       case SessionStatus.finishedWithErrors:
@@ -632,14 +588,8 @@ extension on SessionStatus {
         return t.progressPage.total.title.canceledSender;
       case SessionStatus.canceledByReceiver:
         return t.progressPage.total.title.canceledReceiver;
-      case SessionStatus.waiting:
-        return t.sendPage.waiting;
-      case SessionStatus.recipientBusy:
-        return t.sendPage.busy;
-      case SessionStatus.declined:
-        return t.sendPage.rejected;
-      case SessionStatus.tooManyAttempts:
-        return t.sendPage.tooManyAttempts;
+      default:
+        return '';
     }
   }
 }

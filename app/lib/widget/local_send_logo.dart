@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/assets.gen.dart';
 
 class LocalSendLogo extends StatelessWidget {
@@ -10,13 +9,13 @@ class LocalSendLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final logo = ColorFiltered(
-      colorFilter: const ColorFilter.mode(
-        kAccentCyan,
+      colorFilter: ColorFilter.mode(
+        Theme.of(context).colorScheme.primary,
         BlendMode.srcATop,
       ),
       child: Assets.img.logo512.image(
-        width: 80,
-        height: 80,
+        width: 200,
+        height: 200,
       ),
     );
 
@@ -24,20 +23,10 @@ class LocalSendLogo extends StatelessWidget {
       return Column(
         children: [
           logo,
-          const SizedBox(height: 8),
-          ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [kAccentCyan, kAccentPurple],
-            ).createShader(bounds),
-            child: const Text(
-              'LocalSend',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-            ),
+          const Text(
+            'LocalSend',
+            style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
           ),
         ],
       );
