@@ -1120,4 +1120,3 @@ class _FilesComingSoonDialogState extends State<_FilesComingSoonDialog> {
     );
   }
 }
-}
