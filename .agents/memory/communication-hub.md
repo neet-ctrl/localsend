@@ -7,7 +7,9 @@ description: Full overview of the Hub tab added to LocalSend — chat, voice, vi
 
 ### New files
 - `app/lib/model/hub/` — `hub_message.dart`, `hub_call_state.dart`, `hub_remote_file.dart`
-- `app/lib/provider/hub/` — `hub_chat_provider.dart`, `hub_call_provider.dart`, `hub_files_provider.dart`, `hub_ringtone_service.dart`
+- `app/lib/provider/hub/` — `hub_chat_provider.dart`, `hub_call_provider.dart`, `hub_files_provider.dart`, `hub_ringtone_service.dart`, `hub_foreground_service.dart`
+- `app/android/app/src/main/kotlin/.../HubForegroundService.kt` — native Android foreground service; starts headless Flutter engine (cached as `localsend_hub_bg_engine`) so server lives in background
+- `app/android/app/src/main/kotlin/.../BootReceiver.kt` — starts `HubForegroundService` on `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`
 - `app/lib/provider/network/server/controller/hub_controller.dart` — HTTP route handlers + `HubIncomingBuffer` singleton
 - `app/lib/pages/hub/` — `hub_chat_page.dart`, `hub_voice_call_page.dart`, `hub_video_call_page.dart`, `hub_remote_files_page.dart`
 - `app/lib/pages/tabs/communication_hub_tab.dart` — device discovery cards + hub dashboard

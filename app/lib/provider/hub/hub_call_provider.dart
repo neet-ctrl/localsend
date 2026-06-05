@@ -7,6 +7,8 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:localsend_app/model/hub/hub_call_state.dart';
 import 'package:localsend_app/provider/hub/hub_ringtone_service.dart';
 import 'package:localsend_app/provider/network/server/controller/hub_controller.dart';
+import 'package:localsend_app/provider/network/server/server_provider.dart';
+import 'package:localsend_app/provider/security_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
@@ -109,6 +111,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
       await _peerConnection!.setLocalDescription(offer);
 
       final myAlias = ref.read(settingsProvider).alias;
+      final myPort = ref.read(serverProvider)?.port ?? 53317;
+      final myFingerprint = ref.read(securityProvider).certificateHash;
       final ip = device.ip;
       if (ip != null) {
         await _httpPost(
@@ -121,6 +125,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
             'type': offer.type,
             'callType': type.name,
             'callerAlias': myAlias,
+            'callerPort': myPort,
+            'callerFingerprint': myFingerprint,
           },
         );
       }

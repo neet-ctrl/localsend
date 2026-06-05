@@ -36,6 +36,7 @@ import 'package:localsend_app/provider/window_dimensions_provider.dart';
 import 'package:localsend_app/rust/api/logging.dart' as rust_logging;
 import 'package:localsend_app/rust/frb_generated.dart';
 import 'package:localsend_app/util/i18n.dart';
+import 'package:localsend_app/provider/hub/hub_foreground_service.dart';
 import 'package:localsend_app/util/native/autostart_helper.dart';
 import 'package:localsend_app/util/native/cache_helper.dart';
 import 'package:localsend_app/util/native/content_uri_helper.dart';
@@ -213,6 +214,9 @@ Future<void> postInit(BuildContext context, Ref ref, bool appStart) async {
 
   try {
     await ref.notifier(serverProvider).startServerFromSettings();
+    // Start the Android foreground service so the server stays alive
+    // even after the user swipes the app away from recent apps.
+    unawaited(HubForegroundService.start());
   } catch (e) {
     if (context.mounted) {
       context.showSnackBar(e.toString());

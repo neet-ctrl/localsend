@@ -89,6 +89,8 @@ class HubController {
     try {
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body) as Map<String, dynamic>;
+      // Inject the real IP from the HTTP connection so the receiver can call back
+      json['callerIp'] = request.ip;
       HubIncomingBuffer.instance.addCallOffer(json);
       _respond(request, 200, {'status': 'ok'});
     } catch (e) {

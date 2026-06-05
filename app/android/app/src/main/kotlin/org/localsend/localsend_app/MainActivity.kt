@@ -10,6 +10,7 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -34,6 +35,14 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // Reuse the Flutter engine that the background service may have already started.
+    // This avoids a second engine and a port conflict with the running server.
+    override fun provideFlutterEngine(context: Context): FlutterEngine? {
+        val cached = FlutterEngineCache.getInstance().get(HUB_ENGINE_ID)
+        if (cached != null) return cached
+        return super.provideFlutterEngine(context)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
@@ -41,6 +50,16 @@ class MainActivity : FlutterActivity() {
             CHANNEL
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+                "startHubService" -> {
+                    HubForegroundService.start(applicationContext)
+                    result.success(null)
+                }
+
+                "stopHubService" -> {
+                    HubForegroundService.stop(applicationContext)
+                    result.success(null)
+                }
+
                 "pickDirectory" -> {
                     pendingResult = result
                     openDirectoryPicker(onlyPath = false)

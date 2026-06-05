@@ -80,7 +80,7 @@ dependencies:
   window_manager: 0.5.1
   windows_taskbar: 1.1.2
   yaru: 8.3.0
-  flutter_webrtc: ^0.10.7
+  flutter_webrtc: ^1.4.1
   flutter_ringtone_player: ^4.0.0
 
 dev_dependencies:

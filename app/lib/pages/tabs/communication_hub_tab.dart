@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:common/model/device.dart';
@@ -30,6 +31,7 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
   bool _permissionsChecked = false;
   bool _checkingPermissions = false;
   Map<Permission, bool> _permissionStatus = {};
+  Timer? _scanTimer;
 
   final List<Permission> _requiredPermissions = [
     Permission.microphone,
@@ -43,6 +45,21 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPermissions();
     });
+  }
+
+  void _startContinuousScan() {
+    // Scan immediately, then every 15 seconds so the device list stays live
+    ref.global.dispatchAsync(StartSmartScan(forceLegacy: false));
+    _scanTimer?.cancel();
+    _scanTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) ref.global.dispatchAsync(StartSmartScan(forceLegacy: false));
+    });
+  }
+
+  @override
+  void dispose() {
+    _scanTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkPermissions() async {
@@ -64,6 +81,8 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
       _permissionsChecked = true;
       _checkingPermissions = false;
     });
+    // Start scanning as soon as we know the tab is ready
+    if (mounted) _startContinuousScan();
   }
 
   Future<void> _requestPermissions() async {
@@ -81,6 +100,8 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
       _permissionsGranted = allGranted;
       _checkingPermissions = false;
     });
+    // Re-scan after user grants permissions
+    if (mounted) _startContinuousScan();
   }
 
   @override
