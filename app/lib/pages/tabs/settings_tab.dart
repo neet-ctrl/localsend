@@ -20,6 +20,7 @@ import 'package:localsend_app/provider/version_provider.dart';
 import 'package:localsend_app/util/alias_generator.dart';
 import 'package:localsend_app/util/device_type_ext.dart';
 import 'package:localsend_app/util/native/macos_channel.dart';
+import 'package:localsend_app/util/native/content_uri_helper.dart';
 import 'package:localsend_app/util/native/pick_directory_path.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:localsend_app/widget/custom_dropdown_button.dart';
@@ -36,6 +37,25 @@ import 'package:refena_flutter/refena_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:routerino/routerino.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+/// Returns a human-readable label for the save folder setting.
+/// Converts Android SAF content:// URIs (e.g. content://...tree/primary%3AAlarms)
+/// to a plain folder name (e.g. "Alarms / primary").
+/// Falls back to the raw value or the default Downloads label.
+String _destinationLabel(String? destination, String downloadsLabel) {
+  if (destination == null) return downloadsLabel;
+  if (destination.startsWith('content://')) {
+    final decoded = ContentUriHelper.getPathFromTreeUri(destination);
+    if (decoded != null) {
+      // decoded is like "primary:Alarms" or "primary:Downloads/MyFolder"
+      final parts = decoded.replaceAll(':', '/').split('/').where((p) => p.isNotEmpty).toList();
+      if (parts.length == 1) return parts.first;
+      // Show "Storage / Folder" format — last segment is the leaf folder
+      return parts.last;
+    }
+  }
+  return destination;
+}
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab();
@@ -227,7 +247,7 @@ class SettingsTab extends StatelessWidget {
                             },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 5),
-                              child: Text(vm.settings.destination ?? t.settingsTab.receive.downloads, style: Theme.of(context).textTheme.titleMedium),
+                              child: Text(_destinationLabel(vm.settings.destination, t.settingsTab.receive.downloads), style: Theme.of(context).textTheme.titleMedium),
                             ),
                           ),
                         ),

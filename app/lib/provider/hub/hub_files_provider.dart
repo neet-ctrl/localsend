@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:common/model/device.dart';
 import 'package:localsend_app/model/hub/hub_remote_file.dart';
+import 'package:localsend_app/provider/device_info_provider.dart';
+import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/hub_http.dart';
 import 'package:localsend_app/util/hub_logger.dart';
+import 'package:localsend_app/util/native/directories.dart';
+import 'package:localsend_app/util/native/file_saver.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
 final _log = HubLogger.instance;
@@ -84,7 +89,6 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
 
   Future<void> openDevice(Device device) async {
     _log.info(HubLogCategory.files, 'Opening device ${device.alias} (${device.ip}:${device.port} https=${device.https})');
-    // Start at the most accessible directory rather than OS root
     final startPath = _defaultStartPath();
     state = HubFilesState(remoteDevice: device, isLoading: true, currentPath: startPath);
     await _loadPath(startPath);
@@ -173,9 +177,14 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
 
   void clearSelection() => state = state.copyWith(selectedFiles: {});
 
-  Future<void> downloadFile(HubRemoteFile file, String savePath) async {
+  /// Downloads a file from the remote file browser to the user's configured save folder.
+  Future<void> downloadFile(HubRemoteFile file) async {
     final device = state.remoteDevice;
     if (device?.ip == null) return;
+
+    final settings = ref.read(settingsProvider);
+    final destDir = settings.destination ?? await getDefaultDestinationDirectory();
+    final androidSdkInt = ref.read(deviceInfoProvider).androidSdkInt;
 
     final transfer = HubTransferItem(
       id: '${file.path}_${DateTime.now().millisecondsSinceEpoch}',
@@ -189,25 +198,34 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
     final scheme = device!.https ? 'https' : 'http';
     final uri = Uri.parse('$scheme://${device.ip}:${device.port}/hub/file')
         .replace(queryParameters: {'path': file.path});
-    _log.info(HubLogCategory.files, 'Download GET $uri → $savePath');
+    _log.info(HubLogCategory.files, 'Download GET $uri → dir: $destDir');
 
     try {
       final client = lanHttpClient();
       final req = await client.getUrl(uri);
       final resp = await req.close();
 
-      final outFile = File(savePath);
-      await outFile.parent.create(recursive: true);
-      final sink = outFile.openWrite();
-      await for (final chunk in resp) {
-        sink.add(chunk);
-        transfer.downloadedBytes += chunk.length;
-        state = state.copyWith(transfers: List.from(state.transfers));
-      }
-      await sink.close();
+      final stream = resp.map((chunk) => chunk is Uint8List ? chunk : Uint8List.fromList(chunk));
+
+      final createdDirs = <String>{};
+      final (_, savedPath) = await saveFile(
+        destinationDirectory: destDir,
+        fileName: file.name,
+        saveToGallery: false,
+        isImage: _isImage(file.name),
+        stream: stream,
+        onProgress: (bytes) {
+          transfer.downloadedBytes = bytes;
+          state = state.copyWith(transfers: List.from(state.transfers));
+        },
+        createdDirectories: createdDirs,
+        androidSdkInt: androidSdkInt,
+      );
+
       client.close();
       transfer.done = true;
-      _log.info(HubLogCategory.files, 'Download complete: ${file.name} (${transfer.downloadedBytes} bytes)');
+      transfer.downloadedBytes = file.size ?? transfer.downloadedBytes;
+      _log.info(HubLogCategory.files, 'Download complete: ${file.name} → ${savedPath ?? destDir}');
     } catch (e) {
       transfer.failed = true;
       _log.error(HubLogCategory.files, 'Download failed for "${file.name}": $e');
@@ -215,17 +233,19 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
     state = state.copyWith(transfers: List.from(state.transfers));
   }
 
-  /// Download a file from a chat message directly (not from the file browser).
-  /// [senderIp] / [senderPort] come from the HubMessage metadata.
+  /// Downloads a file attachment from a chat message to the user's configured save folder.
   Future<void> downloadChatFile({
     required String senderIp,
     required int senderPort,
     required bool senderHttps,
     required String remotePath,
     required String fileName,
-    required String savePath,
     int? fileSize,
   }) async {
+    final settings = ref.read(settingsProvider);
+    final destDir = settings.destination ?? await getDefaultDestinationDirectory();
+    final androidSdkInt = ref.read(deviceInfoProvider).androidSdkInt;
+
     final transfer = HubTransferItem(
       id: '${remotePath}_${DateTime.now().millisecondsSinceEpoch}',
       fileName: fileName,
@@ -237,25 +257,34 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
     final scheme = senderHttps ? 'https' : 'http';
     final uri = Uri.parse('$scheme://$senderIp:$senderPort/hub/file')
         .replace(queryParameters: {'path': remotePath});
-    _log.info(HubLogCategory.files, 'Chat-file download GET $uri → $savePath');
+    _log.info(HubLogCategory.files, 'Chat-file download GET $uri → dir: $destDir');
 
     try {
       final client = lanHttpClient();
       final req = await client.getUrl(uri);
       final resp = await req.close();
 
-      final outFile = File(savePath);
-      await outFile.parent.create(recursive: true);
-      final sink = outFile.openWrite();
-      await for (final chunk in resp) {
-        sink.add(chunk);
-        transfer.downloadedBytes += chunk.length;
-        state = state.copyWith(transfers: List.from(state.transfers));
-      }
-      await sink.close();
+      final stream = resp.map((chunk) => chunk is Uint8List ? chunk : Uint8List.fromList(chunk));
+
+      final createdDirs = <String>{};
+      final (_, savedPath) = await saveFile(
+        destinationDirectory: destDir,
+        fileName: fileName,
+        saveToGallery: false,
+        isImage: _isImage(fileName),
+        stream: stream,
+        onProgress: (bytes) {
+          transfer.downloadedBytes = bytes;
+          state = state.copyWith(transfers: List.from(state.transfers));
+        },
+        createdDirectories: createdDirs,
+        androidSdkInt: androidSdkInt,
+      );
+
       client.close();
       transfer.done = true;
-      _log.info(HubLogCategory.files, 'Chat-file download complete: $fileName');
+      transfer.downloadedBytes = fileSize ?? transfer.downloadedBytes;
+      _log.info(HubLogCategory.files, 'Chat-file download complete: $fileName → ${savedPath ?? destDir}');
     } catch (e) {
       transfer.failed = true;
       _log.error(HubLogCategory.files, 'Chat-file download failed: $e');
@@ -269,4 +298,9 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
   }
 
   void reset() => state = const HubFilesState();
+
+  bool _isImage(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif'].contains(ext);
+  }
 }

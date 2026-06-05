@@ -9,7 +9,6 @@ import 'package:localsend_app/model/hub/hub_message.dart';
 import 'package:localsend_app/provider/hub/hub_chat_provider.dart';
 import 'package:localsend_app/provider/hub/hub_files_provider.dart';
 import 'package:localsend_app/provider/security_provider.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
 
@@ -90,32 +89,20 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
       return;
     }
 
-    try {
-      final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
-      final savePath = '${dir.path}/$fileName';
-      ref.notifier(hubFilesProvider).downloadChatFile(
-        senderIp: senderIp,
-        senderPort: senderPort,
-        senderHttps: msg.senderHttps ?? false,
-        remotePath: msg.content,
-        fileName: fileName,
-        savePath: savePath,
-        fileSize: msg.fileSize,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Downloading $fileName to Downloads…'),
-          backgroundColor: const Color(0xFF1A2235),
-          behavior: SnackBarBehavior.floating,
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Download failed: $e'),
-          backgroundColor: Colors.red.shade900,
-        ));
-      }
+    ref.notifier(hubFilesProvider).downloadChatFile(
+      senderIp: senderIp,
+      senderPort: senderPort,
+      senderHttps: msg.senderHttps ?? false,
+      remotePath: msg.content,
+      fileName: fileName,
+      fileSize: msg.fileSize,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Downloading $fileName to your save folder…'),
+        backgroundColor: const Color(0xFF1A2235),
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 

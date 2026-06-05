@@ -1,0 +1,32 @@
+[18:34:28.191][INFO][MSG  ] Loaded 1 conversations from storage
+[18:34:33.324][INFO][FILES] Opening device Special Coconut (10.135.212.52:53317 https=true)
+[18:34:33.324][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0
+[18:34:34.088][INFO][FILES] Response 200 (2733 bytes)
+[18:34:34.088][INFO][FILES] Loaded 21 entries at "/storage/emulated/0"
+[18:34:35.393][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0%2FAudiobooks
+[18:34:35.504][INFO][FILES] Response 200 (2 bytes)
+[18:34:35.504][INFO][FILES] Loaded 0 entries at "/storage/emulated/0/Audiobooks"
+[18:34:37.645][INFO][FILES] Opening device Special Coconut (10.135.212.52:53317 https=true)
+[18:34:37.645][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0
+[18:34:37.923][INFO][FILES] Response 200 (2733 bytes)
+[18:34:37.923][INFO][FILES] Loaded 21 entries at "/storage/emulated/0"
+[18:34:38.879][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0%2FDocuments
+[18:34:39.352][INFO][FILES] Response 200 (571 bytes)
+[18:34:39.352][INFO][FILES] Loaded 4 entries at "/storage/emulated/0/Documents"
+[18:34:40.180][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0%2FDocuments%2FImageToolbox
+[18:34:40.514][INFO][FILES] Response 200 (2 bytes)
+[18:34:40.514][INFO][FILES] Loaded 0 entries at "/storage/emulated/0/Documents/ImageToolbox"
+[18:34:41.781][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0%2FDocuments
+[18:34:42.049][INFO][FILES] Response 200 (571 bytes)
+[18:34:42.050][INFO][FILES] Loaded 4 entries at "/storage/emulated/0/Documents"
+[18:34:42.183][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0
+[18:34:42.239][INFO][FILES] Response 200 (2733 bytes)
+[18:34:42.239][INFO][FILES] Loaded 21 entries at "/storage/emulated/0"
+[18:34:43.834][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0%2Fbelllo
+[18:34:44.670][INFO][FILES] Response 200 (359 bytes)
+[18:34:44.670][INFO][FILES] Loaded 2 entries at "/storage/emulated/0/belllo"
+[18:34:47.178][INFO][FILES] Download GET https://10.135.212.52:53317/hub/file?path=%2Fstorage%2Femulated%2F0%2Fbelllo%2Fscreenshot_20260602_194556.png → /storage/emulated/0/Android/data/org.localsend.localsend_app/files/downloads/screenshot_20260602_194556.png
+[18:34:48.038][INFO][FILES] Download complete: screenshot_20260602_194556.png (3225163 bytes)
+[18:35:17.231][INFO][FILES] GET https://10.135.212.52:53317/hub/files?path=%2Fstorage%2Femulated%2F0
+[18:35:18.072][INFO][FILES] Response 200 (2733 bytes)
+[18:35:18.072][INFO][FILES] Loaded 21 entries at "/storage/emulated/0"

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/model/hub/hub_remote_file.dart';
 import 'package:localsend_app/provider/hub/hub_files_provider.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
 
@@ -270,25 +269,15 @@ class HubRemoteFilesPage extends StatelessWidget {
   }
 
   Future<void> _downloadFile(BuildContext context, HubRemoteFile file, bool isDark) async {
-    try {
-      final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
-      final savePath = '${dir.path}/${file.name}';
-      context.notifier(hubFilesProvider).downloadFile(file, savePath);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Downloading ${file.name}...'),
-            backgroundColor: const Color(0xFF1A2235),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download failed: $e'), backgroundColor: Colors.red.shade900),
-        );
-      }
+    context.notifier(hubFilesProvider).downloadFile(file);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Downloading ${file.name} to your save folder…'),
+          backgroundColor: const Color(0xFF1A2235),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
