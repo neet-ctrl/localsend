@@ -17,9 +17,9 @@ import 'package:localsend_app/widget/responsive_builder.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 
 enum HomeTab {
-  receive(Icons.wifi),
-  send(Icons.send),
-  settings(Icons.settings);
+  receive(Icons.wifi_rounded),
+  send(Icons.send_rounded),
+  settings(Icons.settings_rounded);
 
   const HomeTab(this.icon);
 
@@ -71,6 +71,7 @@ class _HomePageState extends State<HomePage> with Refena {
   Widget build(BuildContext context) {
     Translations.of(context); // rebuild on locale change
     final vm = context.watch(homePageControllerProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return DropTarget(
       onDragEntered: (_) {
@@ -120,10 +121,20 @@ class _HomePageState extends State<HomePage> with Refena {
                                       ? // considered adding some extra space so it looks more natural
                                         SizedBox(height: 40)
                                       : SizedBox(height: 20),
-                                  const Text(
-                                    'LocalSend',
-                                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                                    textAlign: TextAlign.center,
+                                  ShaderMask(
+                                    shaderCallback: (bounds) => const LinearGradient(
+                                      colors: [kAccentCyan, Color(0xFF00B8D9)],
+                                    ).createShader(bounds),
+                                    child: const Text(
+                                      'LocalSend',
+                                      style: TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: -0.5,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ),
                                   SizedBox(height: 20),
                                 ],
@@ -166,14 +177,37 @@ class _HomePageState extends State<HomePage> with Refena {
                         Container(
                           width: double.infinity,
                           decoration: BoxDecoration(
-                            color: Theme.of(context).scaffoldBackgroundColor,
+                            color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.95),
                           ),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.file_download, size: 128),
+                              Container(
+                                padding: const EdgeInsets.all(32),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: kAccentCyan.withValues(alpha: 0.1),
+                                  border: Border.all(
+                                    color: kAccentCyan.withValues(alpha: 0.4),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: kAccentCyan.withValues(alpha: 0.2),
+                                      blurRadius: 40,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(Icons.file_download_rounded, size: 64, color: kAccentCyan),
+                              ),
                               const SizedBox(height: 30),
-                              Text(t.sendTab.placeItems, style: Theme.of(context).textTheme.titleLarge),
+                              Text(
+                                t.sendTab.placeItems,
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark ? Colors.white : const Color(0xFF0D1220),
+                                ),
+                              ),
                             ],
                           ),
                         ),

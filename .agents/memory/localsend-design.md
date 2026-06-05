@@ -14,40 +14,57 @@ description: Complete UI redesign of LocalSend Flutter app — design tokens, pa
 - `kGlassBorder` = `0x26FFFFFF` — frosted glass border (15% white)
 - `kAccentCyan` = `0xFF00E5FF` — primary accent
 - `kAccentPurple` = `0xFF7C4DFF` — secondary accent
-- `desktopPaddingFix` — constant for desktop button padding
+- `desktopPaddingFix` — getter in theme.dart (import theme to use it)
 
-## Widget Patterns
+## Completed UI redesign files (all logic unchanged)
+### Widgets
+- `app/lib/widget/list_tile/custom_list_tile.dart` — glassmorphic card tile with cyan icon circle
+- `app/lib/widget/list_tile/device_list_tile.dart` — device tile with favorite heart button
+- `app/lib/widget/device_bage.dart` — pill badge with cyan glow border
+- `app/lib/widget/custom_progress_bar.dart` — cyan gradient linear progress bar
+- `app/lib/widget/custom_icon_button.dart` — frosted circle button
+- `app/lib/widget/big_button.dart` — filled/unfilled gradient card button (no redundant GestureDetector)
+- `app/lib/widget/local_send_logo.dart` — radial glow circle + ShaderMask gradient text
+- `app/lib/widget/custom_basic_appbar.dart` — frosted back button, macOS MoveWindow preserved
 
-### Dialog pattern
+### Pages & Tabs
+- `app/lib/pages/home_page.dart` — ShaderMask gradient title on desktop rail, cyan drop indicator circle
+- `app/lib/pages/tabs/send_tab.dart` — glassmorphic file selection card
+- `app/lib/pages/tabs/receive_tab.dart` — gradient alias title, online badge, frosted info box
+- `app/lib/pages/tabs/settings_tab.dart` — glassmorphic section cards with cyan accent bar, styled switches/buttons
+- `app/lib/pages/progress_page.dart` — glassmorphic progress card at bottom with cyan glow
+
+## Core glassmorphic card pattern
 ```dart
-Dialog(backgroundColor: Colors.transparent,
-  child: ClipRRect(borderRadius: 20,
-    child: BackdropFilter(filter: blur(20,20),
-      child: Container(color: kSurface, border: kGlassBorder))))
+Container(
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(20),
+    gradient: isDark
+        ? LinearGradient(colors: [Color(0xFF1A2235), Color(0xFF111827)], ...)
+        : LinearGradient(colors: [Colors.white, Color(0xFFF0F4FF)], ...),
+    border: Border.all(color: isDark ? kGlassBorder : Color(0x1A000000), width: 1),
+    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 16, offset: Offset(0, 6))],
+  ),
+  child: ClipRRect(borderRadius: ..., child: Material(type: transparency, child: InkWell(...))),
+)
 ```
 
-### Gradient action button
+## Icon circle pattern
 ```dart
-Container(gradient: LinearGradient([kAccentCyan, kAccentPurple]),
-  boxShadow: [cyan 30% opacity blur 12],
-  child: ElevatedButton(backgroundColor: transparent))
+Container(
+  decoration: BoxDecoration(
+    shape: BoxShape.circle,
+    gradient: LinearGradient(colors: [Color(0xFF1E3A5C), Color(0xFF0D1E35)]),
+    border: Border.all(color: kAccentCyan.withValues(alpha: 0.3), width: 1.5),
+    boxShadow: [BoxShadow(color: kAccentCyan.withValues(alpha: 0.15), blurRadius: 12)],
+  ),
+)
 ```
 
-### Warning/error colors
-- Use `Colors.orangeAccent` everywhere — never `colorScheme.warning`
-- Use `Colors.redAccent` for destructive/delete actions
-
-### Page scaffold
-```dart
-Scaffold(backgroundColor: kBgDark, appBar: basicLocalSendAppbar(title))
-```
-
-## Scope — all files rewritten
-- All pages (home, send, receive, progress, history, settings, about, etc.)
-- All tabs (send_tab, receive_tab, settings_tab)
-- All dialogs (50+ dialog files)
-- All debug pages (debug, security, http_logs, discovery)
-- All core widgets (big_button, custom_basic_appbar, custom_progress_bar, etc.)
-
-**Why:** User requested complete 3D glassmorphic redesign preserving all logic.
-**How to apply:** Never use AlertDialog, colorScheme.warning, or colorScheme.onPrimary — these are all replaced.
+## Rules (follow on every future edit)
+- NEVER change callbacks, providers, navigation, state management, or widget constructors/params
+- Only change: Container colors/gradients, BoxDecoration, borders, shadows, Text styles, Icon colors/sizes
+- The original LocalSend clone at /tmp/localsend_original is ephemeral — may not persist between sessions
+- HomeTab enum icon fields changed to *_rounded variants (pure visual, zero logic impact)
+- SessionState abstract class lives in app/lib/model/state/server/receive_session_state.dart
+- Warning/error: use colorScheme.warning (it's defined in theme.dart extension) — do NOT replace with Colors.orangeAccent

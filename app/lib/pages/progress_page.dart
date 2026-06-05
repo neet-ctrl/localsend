@@ -226,6 +226,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
 
     final fileStatusMap = receiveSession?.files.map((k, f) => MapEntry(k, f.status)) ?? sendSession!.files.map((k, f) => MapEntry(k, f.status));
     final finishedCount = fileStatusMap.values.where((s) => s == FileStatus.finished).length;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return PopScope(
       onPopInvokedWithResult: (didPop, result) {
@@ -261,7 +262,13 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: Theme.of(context).textTheme.titleLarge),
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
                         if (checkPlatformWithFileSystem() && receiveSession != null)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
@@ -401,7 +408,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                                         },
                                         child: Padding(
                                           padding: const EdgeInsets.symmetric(horizontal: 5),
-                                          child: Icon(Icons.info, color: Theme.of(context).colorScheme.warning, size: 20),
+                                          child: Icon(Icons.info_rounded, color: Theme.of(context).colorScheme.warning, size: 20),
                                         ),
                                       ),
                                     ],
@@ -412,7 +419,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                         ),
                         if (sendSession != null && fileStatus == FileStatus.failed)
                           IconButton(
-                            icon: const Icon(Icons.refresh),
+                            icon: const Icon(Icons.refresh_rounded),
                             onPressed: () async {
                               await ref
                                   .notifier(sendProvider)
@@ -435,7 +442,36 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                 alignment: Alignment.bottomCenter,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
-                  child: Card(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      gradient: isDark
+                          ? const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF1A2235), Color(0xFF111827)],
+                            )
+                          : const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Colors.white, Color(0xFFF0F4FF)],
+                            ),
+                      border: Border.all(
+                        color: status == SessionStatus.sending
+                            ? kAccentCyan.withValues(alpha: 0.3)
+                            : (isDark ? kGlassBorder : const Color(0x1A000000)),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: status == SessionStatus.sending
+                              ? kAccentCyan.withValues(alpha: 0.1)
+                              : Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.only(left: 15, right: 15, bottom: 5, top: 10),
                       child: Column(
@@ -446,9 +482,14 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                             status.getLabel(
                               remainingTime: _remainingTime ?? '-',
                             ),
-                            style: const TextStyle(fontSize: 20),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : const Color(0xFF0D1220),
+                              letterSpacing: -0.3,
+                            ),
                           ),
-                          const SizedBox(height: 5),
+                          const SizedBox(height: 8),
                           TweenAnimationBuilder(
                             tween: Tween<double>(begin: 0, end: _totalBytes == 0 ? 0 : currBytes / _totalBytes),
                             duration: const Duration(milliseconds: 200),
@@ -456,7 +497,7 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                             builder: (context, value, child) {
                               return CustomProgressBar(
                                 progress: value,
-                                borderRadius: 5,
+                                borderRadius: 8,
                               );
                             },
                           ),
@@ -475,17 +516,30 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                                       curr: finishedCount,
                                       n: _selectedFiles.length,
                                     ),
+                                    style: TextStyle(
+                                      color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
+                                      fontSize: 13,
+                                    ),
                                   ),
                                   Text(
                                     t.progressPage.total.size(
                                       curr: currBytes.asReadableFileSize,
                                       n: _totalBytes == double.maxFinite.toInt() ? '-' : _totalBytes.asReadableFileSize,
                                     ),
+                                    style: TextStyle(
+                                      color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
+                                      fontSize: 13,
+                                    ),
                                   ),
                                   if (speedInBytes != null)
                                     Text(
                                       t.progressPage.total.speed(
                                         speed: speedInBytes.asReadableFileSize,
+                                      ),
+                                      style: const TextStyle(
+                                        color: kAccentCyan,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                 ],
@@ -497,17 +551,24 @@ class _ProgressPageState extends State<ProgressPage> with Refena {
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               TextButton.icon(
-                                style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurface),
+                                style: TextButton.styleFrom(foregroundColor: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF4A5568)),
                                 onPressed: () {
                                   setState(() => _advanced = !_advanced);
                                 },
-                                icon: const Icon(Icons.info),
+                                icon: const Icon(Icons.info_outline_rounded, size: 18),
                                 label: Text(_advanced ? t.general.hide : t.general.advanced),
                               ),
                               TextButton.icon(
-                                style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurface),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: status == SessionStatus.sending
+                                      ? Theme.of(context).colorScheme.error
+                                      : kAccentCyan,
+                                ),
                                 onPressed: () => _exit(closeSession: true),
-                                icon: Icon(status == SessionStatus.sending ? Icons.close : Icons.check_circle),
+                                icon: Icon(
+                                  status == SessionStatus.sending ? Icons.close_rounded : Icons.check_circle_rounded,
+                                  size: 18,
+                                ),
                                 label: Text(
                                   status == SessionStatus.sending
                                       ? t.general.cancel

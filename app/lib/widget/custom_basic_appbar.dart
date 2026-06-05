@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
 
 class CustomBackButton extends StatelessWidget {
@@ -14,15 +15,35 @@ class CustomBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isRtl = Directionality.of(context) == TextDirection.rtl;
-    return IconButton(
-      icon: Icon(
-        isRtl ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_new_rounded,
-        color: color ?? IconTheme.of(context).color,
-      ),
-      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-      onPressed: () async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: () async {
         await Navigator.maybePop(context);
       },
+      child: Container(
+        margin: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDark ? kGlassFill : const Color(0x0A000000),
+          border: Border.all(
+            color: isDark ? kGlassBorder : const Color(0x15000000),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          isRtl ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_new_rounded,
+          color: color ?? (isDark ? kAccentCyan : const Color(0xFF0D1220)),
+          size: 18,
+        ),
+      ),
     );
   }
 }
@@ -71,5 +92,12 @@ PreferredSizeWidget basicLocalSendAppbar(String title) {
             ),
           ),
         )
-      : AppBar(title: Text(title));
+      : AppBar(
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.3),
+          ),
+          leading: const CustomBackButton(),
+          leadingWidth: 56,
+        );
 }

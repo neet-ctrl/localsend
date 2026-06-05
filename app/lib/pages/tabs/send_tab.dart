@@ -50,6 +50,7 @@ class SendTab extends StatelessWidget {
         final sizingInformation = SizingInformation(MediaQuery.sizeOf(context).width);
         final buttonWidth = sizingInformation.isDesktop ? BigButton.desktopWidth : BigButton.mobileWidth;
         final ref = context.ref;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Stack(
           children: [
             ResponsiveListView(
@@ -61,7 +62,10 @@ class SendTab extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
                     child: Text(
                       t.sendTab.selection.title,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
                     ),
                   ),
                   ResponsiveWrapView(
@@ -84,8 +88,33 @@ class SendTab extends StatelessWidget {
                     }).toList(),
                   ),
                 ] else ...[
-                  Card(
+                  Container(
                     margin: const EdgeInsets.only(bottom: 10, left: _horizontalPadding, right: _horizontalPadding),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: isDark
+                          ? const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF1A2235), Color(0xFF111827)],
+                            )
+                          : const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Colors.white, Color(0xFFF0F4FF)],
+                            ),
+                      border: Border.all(
+                        color: isDark ? kGlassBorder : const Color(0x1A000000),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
                     child: Padding(
                       padding: const EdgeInsetsDirectional.only(start: 15, top: 5, bottom: 15),
                       child: Column(
@@ -95,19 +124,33 @@ class SendTab extends StatelessWidget {
                             children: [
                               Text(
                                 t.sendTab.selection.title,
-                                style: Theme.of(context).textTheme.titleMedium,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                               const Spacer(),
                               CustomIconButton(
                                 onPressed: () => ref.redux(selectedSendingFilesProvider).dispatch(ClearSelectionAction()),
-                                child: Icon(Icons.close, color: Theme.of(context).colorScheme.secondary),
+                                child: const Icon(Icons.close_rounded),
                               ),
                               const SizedBox(width: 5),
                             ],
                           ),
                           const SizedBox(height: 5),
-                          Text(t.sendTab.selection.files(files: vm.selectedFiles.length)),
-                          Text(t.sendTab.selection.size(size: vm.selectedFiles.fold(0, (prev, curr) => prev + curr.size).asReadableFileSize)),
+                          Text(
+                            t.sendTab.selection.files(files: vm.selectedFiles.length),
+                            style: TextStyle(
+                              color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            t.sendTab.selection.size(size: vm.selectedFiles.fold(0, (prev, curr) => prev + curr.size).asReadableFileSize),
+                            style: TextStyle(
+                              color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
+                              fontSize: 13,
+                            ),
+                          ),
                           const SizedBox(height: 10),
                           SizedBox(
                             height: defaultThumbnailSize,
@@ -129,7 +172,7 @@ class SendTab extends StatelessWidget {
                             children: [
                               TextButton(
                                 style: TextButton.styleFrom(
-                                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                  foregroundColor: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF4A5568),
                                 ),
                                 onPressed: () async {
                                   await context.push(() => const SelectedFilesPage());
@@ -139,8 +182,10 @@ class SendTab extends StatelessWidget {
                               const SizedBox(width: 15),
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(context).colorScheme.primary,
-                                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                  backgroundColor: kAccentCyan,
+                                  foregroundColor: kBgDark,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  elevation: 0,
                                 ),
                                 onPressed: () async {
                                   if (_options.length == 1) {
@@ -158,7 +203,7 @@ class SendTab extends StatelessWidget {
                                     options: _options,
                                   );
                                 },
-                                icon: const Icon(Icons.add),
+                                icon: const Icon(Icons.add_rounded),
                                 label: Text(t.general.add),
                               ),
                               const SizedBox(width: 15),
@@ -175,7 +220,13 @@ class SendTab extends StatelessWidget {
                     Flexible(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Text(t.sendTab.nearbyDevices, style: Theme.of(context).textTheme.titleMedium),
+                        child: Text(
+                          t.sendTab.nearbyDevices,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -186,14 +237,14 @@ class SendTab extends StatelessWidget {
                       message: t.sendTab.manualSending,
                       child: CustomIconButton(
                         onPressed: () async => vm.onTapAddress(context),
-                        child: const Icon(Icons.ads_click),
+                        child: const Icon(Icons.ads_click_rounded),
                       ),
                     ),
                     Tooltip(
                       message: t.dialogs.favoriteDialog.title,
                       child: CustomIconButton(
                         onPressed: () async => await vm.onTapFavorite(context),
-                        child: const Icon(Icons.favorite),
+                        child: const Icon(Icons.favorite_rounded),
                       ),
                     ),
                     _SendModeButton(
@@ -253,13 +304,13 @@ class SendTab extends StatelessWidget {
                         children: [
                           Text(
                             t.sendTab.help,
-                            style: const TextStyle(color: Colors.grey),
+                            style: TextStyle(color: isDark ? const Color(0xFF4A5568) : Colors.grey),
                             textAlign: TextAlign.center,
                           ),
                           if (checkPlatformCanReceiveShareIntent())
                             Text(
                               t.sendTab.shareIntentInfo,
-                              style: const TextStyle(color: Colors.grey),
+                              style: TextStyle(color: isDark ? const Color(0xFF4A5568) : Colors.grey),
                               textAlign: TextAlign.center,
                             ),
                         ],
@@ -351,7 +402,7 @@ class _ScanButton extends StatelessWidget {
               context.redux(nearbyDevicesProvider).dispatch(ClearFoundDevicesAction());
               await context.global.dispatchAsync(StartSmartScan(forceLegacy: true));
             },
-            child: Icon(Icons.sync, color: iconColor),
+            child: Icon(Icons.sync_rounded, color: iconColor),
           ),
         ),
       );
@@ -387,7 +438,7 @@ class _ScanButton extends StatelessWidget {
         reverse: true,
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Icon(Icons.sync, color: iconColor),
+          child: Icon(Icons.sync_rounded, color: iconColor),
         ),
       ),
     );
@@ -407,7 +458,7 @@ class _RotatingSyncIcon extends StatelessWidget {
       duration: const Duration(seconds: 2),
       spinning: scanningIps.contains(ip),
       reverse: true,
-      child: const Icon(Icons.sync),
+      child: const Icon(Icons.sync_rounded),
     );
   }
 }
@@ -451,7 +502,7 @@ class _SendModeButton extends StatelessWidget {
                     maintainSize: true,
                     maintainAnimation: true,
                     maintainState: true,
-                    child: const Icon(Icons.check_circle),
+                    child: const Icon(Icons.check_circle_rounded),
                   );
                 },
               ),
@@ -473,7 +524,7 @@ class _SendModeButton extends StatelessWidget {
                     maintainSize: true,
                     maintainAnimation: true,
                     maintainState: true,
-                    child: const Icon(Icons.check_circle),
+                    child: const Icon(Icons.check_circle_rounded),
                   );
                 },
               ),
@@ -492,7 +543,7 @@ class _SendModeButton extends StatelessWidget {
                 maintainSize: true,
                 maintainAnimation: true,
                 maintainState: true,
-                child: Icon(Icons.check_circle),
+                child: Icon(Icons.check_circle_rounded),
               ),
               const SizedBox(width: 10),
               Text(t.sendTab.sendModes.link),
@@ -507,7 +558,7 @@ class _SendModeButton extends StatelessWidget {
             children: [
               const Directionality(
                 textDirection: TextDirection.ltr,
-                child: Icon(Icons.help),
+                child: Icon(Icons.help_rounded),
               ),
               const SizedBox(width: 10),
               Text(t.sendTab.sendModeHelp),
@@ -517,7 +568,7 @@ class _SendModeButton extends StatelessWidget {
       ],
       child: const Padding(
         padding: EdgeInsets.all(8),
-        child: Icon(Icons.settings),
+        child: Icon(Icons.tune_rounded),
       ),
     );
   }

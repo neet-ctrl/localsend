@@ -647,6 +647,7 @@ class _BooleanEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return _SettingsEntry(
       label: label,
       child: Stack(
@@ -655,8 +656,12 @@ class _BooleanEntry extends StatelessWidget {
             width: double.infinity,
             height: 50,
             decoration: BoxDecoration(
-              color: theme.inputDecorationTheme.fillColor,
-              borderRadius: theme.inputDecorationTheme.borderRadius,
+              color: isDark ? const Color(0xFF0D1623) : const Color(0xFFF0F4FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark ? kGlassBorder : const Color(0x12000000),
+                width: 1,
+              ),
             ),
           ),
           Positioned.fill(
@@ -664,8 +669,8 @@ class _BooleanEntry extends StatelessWidget {
               child: Switch(
                 value: value,
                 onChanged: onChanged,
-                activeTrackColor: theme.colorScheme.primary,
-                activeThumbColor: theme.colorScheme.onPrimary,
+                activeTrackColor: kAccentCyan,
+                activeThumbColor: kBgDark,
                 inactiveThumbColor: theme.colorScheme.outline,
                 inactiveTrackColor: theme.colorScheme.surface,
               ),
@@ -691,20 +696,28 @@ class _ButtonEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return _SettingsEntry(
       label: label,
       child: TextButton(
         style: TextButton.styleFrom(
-          backgroundColor: Theme.of(context).inputDecorationTheme.fillColor,
-          shape: RoundedRectangleBorder(borderRadius: Theme.of(context).inputDecorationTheme.borderRadius),
-          foregroundColor: Theme.of(context).colorScheme.onSurface,
+          backgroundColor: isDark ? const Color(0xFF0D1623) : const Color(0xFFF0F4FF),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: isDark ? kGlassBorder : const Color(0x12000000),
+            ),
+          ),
+          foregroundColor: isDark ? kAccentCyan : const Color(0xFF0D1220),
         ),
         onPressed: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: Text(
             buttonLabel,
-            style: Theme.of(context).textTheme.titleMedium,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
             textAlign: TextAlign.center,
           ),
         ),
@@ -726,16 +739,65 @@ class _SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: padding,
-      child: Card(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: isDark
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1A2235), Color(0xFF111827)],
+                )
+              : const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.white, Color(0xFFF0F4FF)],
+                ),
+          border: Border.all(
+            color: isDark ? kGlassBorder : const Color(0x1A000000),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
         child: Padding(
           padding: const EdgeInsets.only(left: 15, right: 15, top: 15),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Container(
+                    width: 3,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [kAccentCyan, Color(0xFF00B8D9)],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
               ...children,
             ],
           ),

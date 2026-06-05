@@ -20,32 +20,88 @@ class BigButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final sizingInformation = SizingInformation(MediaQuery.sizeOf(context).width);
     final buttonWidth = sizingInformation.isDesktop ? desktopWidth : mobileWidth;
     return SizedBox(
       width: buttonWidth,
-      height: 65.0,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: filled ? colorScheme.primary : colorScheme.secondaryContainerIfDark,
-          foregroundColor: filled ? colorScheme.onPrimary : colorScheme.onSecondaryContainerIfDark,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+      height: 80.0,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: filled
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [kAccentCyan, Color(0xFF00B8D9)],
+                )
+              : LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [const Color(0xFF1A2235), const Color(0xFF111827)]
+                      : [Colors.white, const Color(0xFFF0F4FF)],
+                ),
+          border: Border.all(
+            color: filled
+                ? kAccentCyan.withValues(alpha: 0.6)
+                : (isDark ? kGlassBorder : const Color(0x1A000000)),
+            width: 1.5,
           ),
-          padding: EdgeInsets.only(left: 2, right: 2, top: 10 + desktopPaddingFix, bottom: 8 + desktopPaddingFix),
-        ),
-        onPressed: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.max,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(icon),
-            FittedBox(
-              alignment: Alignment.bottomCenter,
-              child: Text(label, maxLines: 1),
+          boxShadow: [
+            BoxShadow(
+              color: filled
+                  ? kAccentCyan.withValues(alpha: 0.35)
+                  : Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+              blurRadius: filled ? 20 : 12,
+              offset: const Offset(0, 6),
             ),
+            if (filled)
+              BoxShadow(
+                color: kAccentCyan.withValues(alpha: 0.15),
+                blurRadius: 40,
+              ),
           ],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            splashColor: Colors.white.withValues(alpha: 0.15),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 2,
+                right: 2,
+                top: 10 + desktopPaddingFix,
+                bottom: 8 + desktopPaddingFix,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(
+                    icon,
+                    color: filled ? kBgDark : kAccentCyan,
+                    size: 26,
+                  ),
+                  FittedBox(
+                    alignment: Alignment.bottomCenter,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: filled ? kBgDark : (isDark ? Colors.white : const Color(0xFF0D1220)),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
