@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:common/model/device.dart';
 import 'package:flutter/material.dart';
 import 'package:localsend_app/config/theme.dart';
@@ -86,15 +88,8 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final nearbyState = context.watch(nearbyDevicesProvider);
     final chatState = context.watch(hubChatProvider);
-    final callState = context.watch(hubCallProvider);
-
-    if (callState.status == HubCallStatus.incoming) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          context.push(() => const HubVoiceCallPage());
-        }
-      });
-    }
+    // Call overlay is handled globally in HomePage via root navigator — no push needed here.
+    context.watch(hubCallProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
