@@ -13,6 +13,7 @@ import 'package:localsend_app/pages/changelog_page.dart';
 import 'package:localsend_app/pages/donation/donation_page.dart';
 import 'package:localsend_app/pages/language_page.dart';
 import 'package:localsend_app/pages/settings/network_interfaces_page.dart';
+import 'package:localsend_app/pages/settings/permissions_page.dart';
 import 'package:localsend_app/pages/tabs/settings_tab_controller.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/provider/version_provider.dart';
@@ -32,6 +33,7 @@ import 'package:localsend_app/widget/labeled_checkbox.dart';
 import 'package:localsend_app/widget/local_send_logo.dart';
 import 'package:localsend_app/widget/responsive_list_view.dart';
 import 'package:refena_flutter/refena_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:routerino/routerino.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -54,6 +56,7 @@ class SettingsTab extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 40),
                 children: [
                   SizedBox(height: 30 + MediaQuery.of(context).padding.top),
+                  _PermissionsShortcut(),
                   _SettingsSection(
                     title: t.settingsTab.general.title,
                     children: [
@@ -627,6 +630,166 @@ class _SettingsEntry extends StatelessWidget {
             child: child,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Permissions shortcut card (shown at the top of Settings)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PermissionsShortcut extends StatefulWidget {
+  const _PermissionsShortcut();
+
+  @override
+  State<_PermissionsShortcut> createState() => _PermissionsShortcutState();
+}
+
+class _PermissionsShortcutState extends State<_PermissionsShortcut> with WidgetsBindingObserver {
+  int _total = 0;
+  int _granted = 0;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final perms = [
+      Permission.microphone,
+      Permission.camera,
+      if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) Permission.notification,
+      if (Platform.isAndroid) Permission.bluetoothConnect,
+      if (Platform.isAndroid) Permission.storage,
+      if (Platform.isAndroid) Permission.ignoreBatteryOptimizations,
+    ];
+    int granted = 0;
+    for (final p in perms) {
+      if (await p.isGranted) granted++;
+    }
+    if (mounted) {
+      setState(() {
+        _total = perms.length;
+        _granted = granted;
+        _loaded = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final allOk = _loaded && _granted == _total;
+    final statusColor = allOk ? const Color(0xFF00C853) : const Color(0xFFFFB300);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: InkWell(
+        onTap: () async {
+          await context.push(() => const PermissionsPage());
+          _refresh();
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: isDark
+                ? const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1A2235), Color(0xFF111827)],
+                  )
+                : const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.white, Color(0xFFF0F4FF)],
+                  ),
+            border: Border.all(
+              color: allOk
+                  ? const Color(0xFF00C853).withValues(alpha: 0.35)
+                  : (isDark ? kGlassBorder : const Color(0x1A000000)),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                // Icon
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: statusColor.withValues(alpha: 0.12),
+                  ),
+                  child: Icon(
+                    allOk ? Icons.verified_rounded : Icons.shield_outlined,
+                    color: statusColor,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Labels
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Permissions',
+                        style: TextStyle(
+                          color: isDark ? Colors.white : const Color(0xFF0D1220),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _loaded
+                            ? (allOk ? 'All $_total permissions granted — Hub fully operational' : '$_granted of $_total permissions granted')
+                            : 'Checking…',
+                        style: TextStyle(
+                          color: _loaded
+                              ? statusColor
+                              : (isDark ? const Color(0xFF8899AA) : const Color(0xFF64748B)),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Arrow
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: isDark ? const Color(0xFF4A5568) : const Color(0xFFCBD5E1),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
