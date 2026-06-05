@@ -12,6 +12,11 @@ description: Parameters that do NOT exist in the CI build environment (Flutter s
 - `listener:` parameter does NOT exist.
 - **Workaround:** Track previous value in `State` class (e.g. `SessionStatus? _prevStatus`) and compare inside `builder:` callback. Call side-effects (e.g. `TaskbarHelper.visualizeStatus`) from there.
 
+## Dart arrow-function / cascade parsing gotcha
+- Never use `=> expr` on the same cascade chain line if more `..` cascades follow.
+- Dart parses `..setter = (args) => true\n  ..next` as `true ..next` (cascade on the return value, not the receiver) — error: "setter isn't defined for the type 'bool'".
+- **Fix:** Use a block body `{ return true; }` so the lambda scope ends before the next `..` cascade.
+
 ## Known-good send_provider.dart pattern
 - After `prepareUpload` response, store remote session ID as `final remoteSessionId = response.response!.sessionId` (NOT `final sessionId`) to avoid shadowing the local session UUID used as the state map key.
 
