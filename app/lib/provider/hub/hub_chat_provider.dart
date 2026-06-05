@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:common/model/device.dart';
 import 'package:localsend_app/model/hub/hub_message.dart';
 import 'package:localsend_app/provider/network/server/controller/hub_controller.dart';
+import 'package:localsend_app/provider/network/server/server_provider.dart';
 import 'package:localsend_app/provider/security_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/util/hub_http.dart';
@@ -108,6 +109,7 @@ class HubChatNotifier extends Notifier<HubChatState> {
   }) async {
     final myFingerprint = ref.read(securityProvider).certificateHash;
     final myAlias = ref.read(settingsProvider).alias;
+    final myPort = ref.read(serverProvider)?.port ?? 53317;
     final msg = HubMessage(
       id: _uuid.v4(),
       senderFingerprint: myFingerprint,
@@ -117,6 +119,9 @@ class HubChatNotifier extends Notifier<HubChatState> {
       type: type,
       fileName: fileName,
       fileSize: fileSize,
+      // Include our own port so receiver knows where to fetch files from
+      senderPort: myPort,
+      senderHttps: device.https,
     );
 
     final ip = device.ip;

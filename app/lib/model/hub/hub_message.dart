@@ -10,6 +10,10 @@ class HubMessage {
   final String? filePath;
   final String? fileName;
   final int? fileSize;
+  // Network address of sender — injected by receiver's server from the HTTP connection
+  final String? senderIp;
+  final int? senderPort;
+  final bool? senderHttps;
   bool delivered;
   bool read;
 
@@ -23,6 +27,9 @@ class HubMessage {
     this.filePath,
     this.fileName,
     this.fileSize,
+    this.senderIp,
+    this.senderPort,
+    this.senderHttps,
     this.delivered = false,
     this.read = false,
   });
@@ -37,6 +44,9 @@ class HubMessage {
     'filePath': filePath,
     'fileName': fileName,
     'fileSize': fileSize,
+    'senderIp': senderIp,
+    'senderPort': senderPort,
+    'senderHttps': senderHttps,
     'delivered': delivered,
     'read': read,
   };
@@ -54,6 +64,9 @@ class HubMessage {
     filePath: json['filePath'] as String?,
     fileName: json['fileName'] as String?,
     fileSize: json['fileSize'] as int?,
+    senderIp: json['senderIp'] as String?,
+    senderPort: json['senderPort'] as int?,
+    senderHttps: json['senderHttps'] as bool?,
     delivered: json['delivered'] as bool? ?? false,
     read: json['read'] as bool? ?? false,
   );

@@ -84,8 +84,15 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
 
   Future<void> openDevice(Device device) async {
     _log.info(HubLogCategory.files, 'Opening device ${device.alias} (${device.ip}:${device.port} https=${device.https})');
-    state = HubFilesState(remoteDevice: device, isLoading: true);
-    await _loadPath('/');
+    // Start at the most accessible directory rather than OS root
+    final startPath = _defaultStartPath();
+    state = HubFilesState(remoteDevice: device, isLoading: true, currentPath: startPath);
+    await _loadPath(startPath);
+  }
+
+  String _defaultStartPath() {
+    if (Platform.isAndroid) return '/storage/emulated/0';
+    return '/';
   }
 
   Future<void> navigate(String path) async {
@@ -204,6 +211,54 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
     } catch (e) {
       transfer.failed = true;
       _log.error(HubLogCategory.files, 'Download failed for "${file.name}": $e');
+    }
+    state = state.copyWith(transfers: List.from(state.transfers));
+  }
+
+  /// Download a file from a chat message directly (not from the file browser).
+  /// [senderIp] / [senderPort] come from the HubMessage metadata.
+  Future<void> downloadChatFile({
+    required String senderIp,
+    required int senderPort,
+    required bool senderHttps,
+    required String remotePath,
+    required String fileName,
+    required String savePath,
+    int? fileSize,
+  }) async {
+    final transfer = HubTransferItem(
+      id: '${remotePath}_${DateTime.now().millisecondsSinceEpoch}',
+      fileName: fileName,
+      totalBytes: fileSize,
+    );
+    final transfers = List<HubTransferItem>.from(state.transfers)..add(transfer);
+    state = state.copyWith(transfers: transfers);
+
+    final scheme = senderHttps ? 'https' : 'http';
+    final uri = Uri.parse('$scheme://$senderIp:$senderPort/hub/file')
+        .replace(queryParameters: {'path': remotePath});
+    _log.info(HubLogCategory.files, 'Chat-file download GET $uri → $savePath');
+
+    try {
+      final client = lanHttpClient();
+      final req = await client.getUrl(uri);
+      final resp = await req.close();
+
+      final outFile = File(savePath);
+      await outFile.parent.create(recursive: true);
+      final sink = outFile.openWrite();
+      await for (final chunk in resp) {
+        sink.add(chunk);
+        transfer.downloadedBytes += chunk.length;
+        state = state.copyWith(transfers: List.from(state.transfers));
+      }
+      await sink.close();
+      client.close();
+      transfer.done = true;
+      _log.info(HubLogCategory.files, 'Chat-file download complete: $fileName');
+    } catch (e) {
+      transfer.failed = true;
+      _log.error(HubLogCategory.files, 'Chat-file download failed: $e');
     }
     state = state.copyWith(transfers: List.from(state.transfers));
   }

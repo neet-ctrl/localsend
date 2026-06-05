@@ -1,11 +1,15 @@
-import 'package:common/model/device.dart';
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:common/model/device.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/model/hub/hub_message.dart';
 import 'package:localsend_app/provider/hub/hub_chat_provider.dart';
+import 'package:localsend_app/provider/hub/hub_files_provider.dart';
 import 'package:localsend_app/provider/security_provider.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
 
@@ -56,17 +60,63 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
   }
 
   Future<void> _sendFile() async {
-    final result = await FilePicker.platform.pickFiles();
+    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
+    final path = file.path;
+    if (path == null) return;
     await ref.notifier(hubChatProvider).sendMessage(
       device: widget.device,
-      content: file.path ?? '',
+      content: path,
       type: HubMessageType.file,
       fileName: file.name,
       fileSize: file.size,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  Future<void> _downloadFile(HubMessage msg) async {
+    final senderIp = msg.senderIp;
+    final senderPort = msg.senderPort;
+    final fileName = msg.fileName ?? msg.content.split(Platform.pathSeparator).last;
+
+    if (senderIp == null || senderPort == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Cannot download: sender address unknown'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
+    try {
+      final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
+      final savePath = '${dir.path}/$fileName';
+      ref.notifier(hubFilesProvider).downloadChatFile(
+        senderIp: senderIp,
+        senderPort: senderPort,
+        senderHttps: msg.senderHttps ?? false,
+        remotePath: msg.content,
+        fileName: fileName,
+        savePath: savePath,
+        fileSize: msg.fileSize,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Downloading $fileName to Downloads…'),
+          backgroundColor: const Color(0xFF1A2235),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Download failed: $e'),
+          backgroundColor: Colors.red.shade900,
+        ));
+      }
+    }
   }
 
   @override
@@ -105,11 +155,20 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(widget.device.alias, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                  const Row(
+                  Row(
                     children: [
-                      CircleAvatar(radius: 3, backgroundColor: Color(0xFF00E676)),
-                      SizedBox(width: 4),
-                      Text('Online', style: TextStyle(fontSize: 11, color: Color(0xFF00E676))),
+                      CircleAvatar(
+                        radius: 3,
+                        backgroundColor: widget.device.ip != null ? const Color(0xFF00E676) : Colors.grey,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.device.ip != null ? 'Online' : 'History',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: widget.device.ip != null ? const Color(0xFF00E676) : Colors.grey,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -118,9 +177,25 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.delete_outline_rounded, color: kAccentCyan), onPressed: () {
-            ref.notifier(hubChatProvider).clearConversation(widget.device.fingerprint);
-          }),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, color: kAccentCyan),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Clear conversation?'),
+                  content: const Text('All messages will be permanently deleted.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Clear')),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                ref.notifier(hubChatProvider).clearConversation(widget.device.fingerprint);
+              }
+            },
+          ),
         ],
       ),
       body: Column(
@@ -145,6 +220,7 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
                         }),
                         onCopy: () => Clipboard.setData(ClipboardData(text: msg.content)),
                         onDelete: () => ref.notifier(hubChatProvider).deleteMessage(widget.device.fingerprint, msg.id),
+                        onDownload: isMe ? null : () => _downloadFile(msg),
                       );
                     },
                   ),
@@ -208,6 +284,7 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
             IconButton(
               icon: const Icon(Icons.attach_file_rounded, color: kAccentCyan),
               onPressed: _sendFile,
+              tooltip: 'Send any file',
             ),
             Expanded(
               child: Container(
@@ -268,6 +345,7 @@ class _MessageBubble extends StatelessWidget {
   final VoidCallback onReply;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
+  final VoidCallback? onDownload;
 
   const _MessageBubble({
     required this.message,
@@ -276,12 +354,14 @@ class _MessageBubble extends StatelessWidget {
     required this.onReply,
     required this.onCopy,
     required this.onDelete,
+    this.onDownload,
   });
 
   @override
   Widget build(BuildContext context) {
     final time = DateTime.fromMillisecondsSinceEpoch(message.timestamp);
     final timeStr = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    final isFile = message.type == HubMessageType.file;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -311,27 +391,60 @@ class _MessageBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              if (message.type == HubMessageType.file)
+              if (isFile) ...[
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.attach_file_rounded, size: 14, color: isMe ? Colors.black : kAccentCyan),
-                    const SizedBox(width: 4),
+                    Icon(Icons.insert_drive_file_rounded, size: 16, color: isMe ? Colors.black : kAccentCyan),
+                    const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        message.fileName ?? 'File',
+                        message.fileName ?? message.content.split(Platform.pathSeparator).last,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: isMe ? Colors.black : (isDark ? Colors.white : Colors.black),
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
-                )
-              else
+                ),
+                if (message.fileSize != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatSize(message.fileSize!),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isMe ? Colors.black54 : (isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4)),
+                    ),
+                  ),
+                ],
+                // Download button for received files
+                if (!isMe && onDownload != null) ...[
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: onDownload,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        color: kAccentCyan.withValues(alpha: 0.15),
+                        border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.download_rounded, size: 14, color: kAccentCyan),
+                          SizedBox(width: 4),
+                          Text('Download', style: TextStyle(color: kAccentCyan, fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ] else
                 Text(
                   message.content,
                   style: TextStyle(
@@ -367,6 +480,13 @@ class _MessageBubble extends StatelessWidget {
     );
   }
 
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
   void _showOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -375,7 +495,10 @@ class _MessageBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(leading: const Icon(Icons.reply_rounded), title: const Text('Reply'), onTap: () { Navigator.pop(context); onReply(); }),
-            ListTile(leading: const Icon(Icons.copy_rounded), title: const Text('Copy'), onTap: () { Navigator.pop(context); onCopy(); }),
+            if (!isMe && onDownload != null && message.type == HubMessageType.file)
+              ListTile(leading: const Icon(Icons.download_rounded, color: kAccentCyan), title: const Text('Download File'), onTap: () { Navigator.pop(context); onDownload!(); }),
+            if (message.type == HubMessageType.text)
+              ListTile(leading: const Icon(Icons.copy_rounded), title: const Text('Copy'), onTap: () { Navigator.pop(context); onCopy(); }),
             ListTile(leading: const Icon(Icons.delete_rounded, color: Colors.red), title: const Text('Delete', style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(context); onDelete(); }),
           ],
         ),

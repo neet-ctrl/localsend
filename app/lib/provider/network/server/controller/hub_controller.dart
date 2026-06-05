@@ -76,6 +76,8 @@ class HubController {
     try {
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body) as Map<String, dynamic>;
+      // Inject the real sender IP from the HTTP connection
+      json['senderIp'] = request.connectionInfo?.remoteAddress.address;
       final msg = HubMessage.fromJson(json);
       HubIncomingBuffer.instance.addMessage(msg);
       _respond(request, 200, {'status': 'ok'});
@@ -89,8 +91,7 @@ class HubController {
     try {
       final body = await utf8.decoder.bind(request).join();
       final json = jsonDecode(body) as Map<String, dynamic>;
-      // Inject the real IP from the HTTP connection so the receiver can call back
-      json['callerIp'] = request.ip;
+      json['callerIp'] = request.connectionInfo?.remoteAddress.address ?? request.ip;
       HubIncomingBuffer.instance.addCallOffer(json);
       _respond(request, 200, {'status': 'ok'});
     } catch (e) {
@@ -128,9 +129,21 @@ class HubController {
   Future<void> _handleFileList(HttpRequest request) async {
     try {
       final rawPath = request.uri.queryParameters['path'] ?? '/';
-      final dir = Directory(rawPath);
+
+      // Map virtual root to the most accessible top-level on each platform
+      String resolvedPath = rawPath;
+      if (rawPath == '/') {
+        if (Platform.isAndroid) {
+          resolvedPath = '/storage/emulated/0';
+        } else if (Platform.isIOS) {
+          // iOS sandbox — list the app's Documents directory instead
+          resolvedPath = '/';
+        }
+      }
+
+      final dir = Directory(resolvedPath);
       if (!await dir.exists()) {
-        _respond(request, 404, {'error': 'not found'});
+        _respond(request, 404, {'error': 'Directory not found: $resolvedPath'});
         return;
       }
       final entries = await dir.list().toList();

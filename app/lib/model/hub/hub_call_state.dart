@@ -13,6 +13,7 @@ class HubCallState {
   final bool isSpeakerOn;
   final bool isVideoEnabled;
   final bool isOnHold;
+  final bool hasRemoteTrack;
   final String? incomingSdp;
   final String? incomingSdpType;
   final String? errorMessage;
@@ -26,6 +27,7 @@ class HubCallState {
     this.isSpeakerOn = false,
     this.isVideoEnabled = true,
     this.isOnHold = false,
+    this.hasRemoteTrack = false,
     this.incomingSdp,
     this.incomingSdpType,
     this.errorMessage,
@@ -40,6 +42,7 @@ class HubCallState {
     bool? isSpeakerOn,
     bool? isVideoEnabled,
     bool? isOnHold,
+    bool? hasRemoteTrack,
     String? incomingSdp,
     String? incomingSdpType,
     String? errorMessage,
@@ -55,6 +58,7 @@ class HubCallState {
         isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
         isVideoEnabled: isVideoEnabled ?? this.isVideoEnabled,
         isOnHold: isOnHold ?? this.isOnHold,
+        hasRemoteTrack: hasRemoteTrack ?? this.hasRemoteTrack,
         incomingSdp: clearIncoming ? null : (incomingSdp ?? this.incomingSdp),
         incomingSdpType: clearIncoming ? null : (incomingSdpType ?? this.incomingSdpType),
         errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),

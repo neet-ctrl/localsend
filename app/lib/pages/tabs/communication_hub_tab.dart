@@ -12,6 +12,7 @@ import 'package:localsend_app/pages/hub/hub_video_call_page.dart';
 import 'package:localsend_app/pages/hub/hub_voice_call_page.dart';
 import 'package:localsend_app/provider/hub/hub_call_provider.dart';
 import 'package:localsend_app/provider/hub/hub_chat_provider.dart';
+import 'package:localsend_app/provider/hub/hub_device_history_provider.dart';
 import 'package:localsend_app/provider/hub/hub_files_provider.dart';
 import 'package:localsend_app/model/state/nearby_devices_state.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
@@ -51,7 +52,6 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
   }
 
   void _startContinuousScan() {
-    // Scan immediately, then every 15 seconds so the device list stays live
     ref.global.dispatchAsync(StartSmartScan(forceLegacy: false));
     _scanTimer?.cancel();
     _scanTimer = Timer.periodic(const Duration(seconds: 15), (_) {
@@ -84,7 +84,6 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
       _permissionsChecked = true;
       _checkingPermissions = false;
     });
-    // Start scanning as soon as we know the tab is ready
     if (mounted) _startContinuousScan();
   }
 
@@ -103,7 +102,6 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
       _permissionsGranted = allGranted;
       _checkingPermissions = false;
     });
-    // Re-scan after user grants permissions
     if (mounted) _startContinuousScan();
   }
 
@@ -112,8 +110,13 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final nearbyState = context.watch(nearbyDevicesProvider);
     final chatState = context.watch(hubChatProvider);
-    // Call overlay is handled globally in HomePage via root navigator — no push needed here.
+    final historyState = context.watch(hubDeviceHistoryProvider);
     context.watch(hubCallProvider);
+
+    // Record every currently-visible device into history
+    for (final d in nearbyState.devices.values) {
+      ref.notifier(hubDeviceHistoryProvider).sawDevice(d);
+    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -121,7 +124,7 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
           ? const Center(child: CircularProgressIndicator(color: kAccentCyan))
           : !_permissionsGranted
           ? _buildPermissionsScreen(isDark)
-          : _buildHubContent(context, isDark, nearbyState, chatState),
+          : _buildHubContent(context, isDark, nearbyState, chatState, historyState),
     );
   }
 
@@ -247,31 +250,85 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
     return Icons.lock_rounded;
   }
 
-  Widget _buildHubContent(BuildContext context, bool isDark, NearbyDevicesState nearbyState, HubChatState chatState) {
-    final allDevices = nearbyState.devices.values.toList();
+  Widget _buildHubContent(
+    BuildContext context,
+    bool isDark,
+    NearbyDevicesState nearbyState,
+    HubChatState chatState,
+    HubDeviceHistoryState historyState,
+  ) {
+    final onlineDevices = nearbyState.devices.values.toList();
+    final onlineFps = onlineDevices.map((d) => d.fingerprint).toSet();
 
-    return Column(
+    // History: devices we've seen before that aren't currently online
+    final offlineHistory = historyState.sorted
+        .where((h) => !onlineFps.contains(h.fingerprint))
+        .toList();
+
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
-        _buildDashboardHeader(isDark, allDevices, chatState),
-        Expanded(
-          child: allDevices.isEmpty
-              ? _buildEmptyState(isDark)
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  itemCount: allDevices.length,
-                  itemBuilder: (ctx, i) => _DeviceCard(
-                    device: allDevices[i],
-                    unreadCount: chatState.unreadCount(allDevices[i].fingerprint),
-                    isDark: isDark,
+        _buildDashboardHeader(isDark, onlineDevices, chatState, historyState),
+
+        // ── Online devices ────────────────────────────────────────────────
+        if (onlineDevices.isEmpty)
+          _buildEmptyState(isDark)
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Column(
+              children: onlineDevices.map((d) => _DeviceCard(
+                device: d,
+                unreadCount: chatState.unreadCount(d.fingerprint),
+                isDark: isDark,
+                isOnline: true,
+              )).toList(),
+            ),
+          ),
+
+        // ── History section ───────────────────────────────────────────────
+        if (offlineHistory.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              children: [
+                Icon(Icons.history_rounded, size: 16, color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4)),
+                const SizedBox(width: 6),
+                Text(
+                  'Previously Connected',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
                   ),
                 ),
-        ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              children: offlineHistory.map((h) => _HistoryDeviceCard(
+                history: h,
+                unreadCount: chatState.unreadCount(h.fingerprint),
+                isDark: isDark,
+                onForget: () => ref.notifier(hubDeviceHistoryProvider).removeDevice(h.fingerprint),
+              )).toList(),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildDashboardHeader(bool isDark, List<Device> devices, HubChatState chatState) {
-    final totalUnread = devices.fold<int>(0, (sum, d) => sum + chatState.unreadCount(d.fingerprint));
+  Widget _buildDashboardHeader(
+    bool isDark,
+    List<Device> devices,
+    HubChatState chatState,
+    HubDeviceHistoryState historyState,
+  ) {
+    final totalUnread = chatState.conversations.keys
+        .fold<int>(0, (sum, fp) => sum + chatState.unreadCount(fp));
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -293,7 +350,7 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _StatCard(icon: Icons.devices_rounded, label: 'Devices', value: '${devices.length}', isDark: isDark)),
+              Expanded(child: _StatCard(icon: Icons.devices_rounded, label: 'Online', value: '${devices.length}', isDark: isDark)),
               const SizedBox(width: 10),
               Expanded(
                 child: _StatCard(
@@ -306,7 +363,13 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _StatCard(icon: Icons.wifi_rounded, label: 'LAN', value: 'Active', isDark: isDark, accent: kAccentCyan),
+                child: _StatCard(
+                  icon: Icons.history_rounded,
+                  label: 'Known',
+                  value: '${historyState.devices.length}',
+                  isDark: isDark,
+                  accent: historyState.devices.isNotEmpty ? kAccentPurple : null,
+                ),
               ),
             ],
           ),
@@ -325,7 +388,6 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Debug logs button
                   GestureDetector(
                     onTap: () => context.push(() => const HubDebugLogPage()),
                     child: Container(
@@ -346,7 +408,6 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Scan button
                   GestureDetector(
                     onTap: () => ref.global.dispatchAsync(StartSmartScan(forceLegacy: false)),
                     child: Container(
@@ -376,39 +437,46 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
   }
 
   Widget _buildEmptyState(bool isDark) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(colors: [Color(0xFF1A2235), Color(0xFF111827)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-              border: Border.all(color: kGlassBorder, width: 1),
+    return Padding(
+      padding: const EdgeInsets.only(top: 40),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(colors: [Color(0xFF1A2235), Color(0xFF111827)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                border: Border.all(color: kGlassBorder, width: 1),
+              ),
+              child: Icon(Icons.radar_rounded, size: 56, color: kAccentCyan.withValues(alpha: 0.6)),
             ),
-            child: Icon(Icons.radar_rounded, size: 56, color: kAccentCyan.withValues(alpha: 0.6)),
-          ),
-          const SizedBox(height: 20),
-          Text('No Devices Found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-          const SizedBox(height: 8),
-          Text(
-            'Make sure other devices have LocalSend open\nand are on the same network.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4), fontSize: 13),
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: () => ref.global.dispatchAsync(StartSmartScan(forceLegacy: false)),
-            icon: const Icon(Icons.search_rounded),
-            label: const Text('Scan Network'),
-            style: FilledButton.styleFrom(backgroundColor: kAccentCyan, foregroundColor: Colors.black),
-          ),
-        ],
+            const SizedBox(height: 20),
+            Text('No Devices Found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+            const SizedBox(height: 8),
+            Text(
+              'Make sure other devices have LocalSend open\nand are on the same network.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4), fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => ref.global.dispatchAsync(StartSmartScan(forceLegacy: false)),
+              icon: const Icon(Icons.search_rounded),
+              label: const Text('Scan Network'),
+              style: FilledButton.styleFrom(backgroundColor: kAccentCyan, foregroundColor: Colors.black),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stat card
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _StatCard extends StatelessWidget {
   final IconData icon;
@@ -446,12 +514,17 @@ class _StatCard extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Online device card
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _DeviceCard extends StatelessWidget {
   final Device device;
   final int unreadCount;
   final bool isDark;
+  final bool isOnline;
 
-  const _DeviceCard({required this.device, required this.unreadCount, required this.isDark});
+  const _DeviceCard({required this.device, required this.unreadCount, required this.isDark, this.isOnline = true});
 
   @override
   Widget build(BuildContext context) {
@@ -493,10 +566,7 @@ class _DeviceCard extends StatelessWidget {
                             if (unreadCount > 0)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  color: kAccentCyan,
-                                ),
+                                decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), color: kAccentCyan),
                                 child: Text('$unreadCount', style: const TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
                               ),
                           ],
@@ -509,13 +579,9 @@ class _DeviceCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF00E676)),
-                            ),
+                            Container(width: 6, height: 6, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF00E676))),
                             const SizedBox(width: 4),
-                            Text('Online', style: const TextStyle(fontSize: 11, color: Color(0xFF00E676))),
+                            const Text('Online', style: TextStyle(fontSize: 11, color: Color(0xFF00E676))),
                             const SizedBox(width: 12),
                             Text(device.ip ?? '', style: TextStyle(fontSize: 11, color: isDark ? const Color(0xFF4A5568) : const Color(0xFFB0BEC5))),
                           ],
@@ -545,7 +611,6 @@ class _DeviceCard extends StatelessWidget {
   }
 
   Widget _buildDeviceIcon() {
-    final icon = _deviceIcon(device.deviceType);
     return Container(
       width: 52,
       height: 52,
@@ -555,37 +620,27 @@ class _DeviceCard extends StatelessWidget {
         border: Border.all(color: kAccentCyan.withValues(alpha: 0.3), width: 1.5),
         boxShadow: [BoxShadow(color: kAccentCyan.withValues(alpha: 0.15), blurRadius: 12)],
       ),
-      child: Icon(icon, color: kAccentCyan, size: 24),
+      child: Icon(_deviceIcon(device.deviceType), color: kAccentCyan, size: 24),
     );
   }
 
   IconData _deviceIcon(DeviceType type) {
     switch (type) {
-      case DeviceType.mobile:
-        return Icons.phone_android_rounded;
-      case DeviceType.desktop:
-        return Icons.computer_rounded;
-      case DeviceType.web:
-        return Icons.language_rounded;
-      case DeviceType.headless:
-        return Icons.dns_rounded;
-      case DeviceType.server:
-        return Icons.storage_rounded;
+      case DeviceType.mobile: return Icons.phone_android_rounded;
+      case DeviceType.desktop: return Icons.computer_rounded;
+      case DeviceType.web: return Icons.language_rounded;
+      case DeviceType.headless: return Icons.dns_rounded;
+      case DeviceType.server: return Icons.storage_rounded;
     }
   }
 
   String _deviceTypeLabel(DeviceType type) {
     switch (type) {
-      case DeviceType.mobile:
-        return 'Mobile Device';
-      case DeviceType.desktop:
-        return 'Desktop / Laptop';
-      case DeviceType.web:
-        return 'Web Browser';
-      case DeviceType.headless:
-        return 'Headless Server';
-      case DeviceType.server:
-        return 'Server';
+      case DeviceType.mobile: return 'Mobile Device';
+      case DeviceType.desktop: return 'Desktop / Laptop';
+      case DeviceType.web: return 'Web Browser';
+      case DeviceType.headless: return 'Headless Server';
+      case DeviceType.server: return 'Server';
     }
   }
 
@@ -609,6 +664,164 @@ class _DeviceCard extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// History (offline) device card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HistoryDeviceCard extends StatelessWidget {
+  final HubHistoryDevice history;
+  final int unreadCount;
+  final bool isDark;
+  final VoidCallback onForget;
+
+  const _HistoryDeviceCard({
+    required this.history,
+    required this.unreadCount,
+    required this.isDark,
+    required this.onForget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final lastSeenDt = DateTime.fromMillisecondsSinceEpoch(history.lastSeen);
+    final now = DateTime.now();
+    final diff = now.difference(lastSeenDt);
+    final lastSeenStr = diff.inMinutes < 60
+        ? '${diff.inMinutes}m ago'
+        : diff.inHours < 24
+            ? '${diff.inHours}h ago'
+            : '${diff.inDays}d ago';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(
+            colors: isDark
+                ? [const Color(0xFF141C2E), const Color(0xFF0D1220)]
+                : [const Color(0xFFF8F9FF), const Color(0xFFEEF2FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: isDark ? kGlassBorder.withValues(alpha: 0.5) : const Color(0x12000000)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            children: [
+              // Icon
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (isDark ? const Color(0xFF1A2235) : Colors.white),
+                  border: Border.all(color: isDark ? kGlassBorder : const Color(0x15000000)),
+                ),
+                child: Icon(_deviceIcon(history.deviceType), color: isDark ? const Color(0xFF4A5568) : const Color(0xFFB0BEC5), size: 22),
+              ),
+              const SizedBox(width: 12),
+              // Labels
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            history.alias,
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? const Color(0xFF8899BB) : const Color(0xFF64748B)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (unreadCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), color: kAccentCyan),
+                            child: Text('$unreadCount', style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(width: 5, height: 5, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? const Color(0xFF4A5568) : const Color(0xFFB0BEC5))),
+                        const SizedBox(width: 4),
+                        Text('Offline · $lastSeenStr', style: TextStyle(fontSize: 10, color: isDark ? const Color(0xFF4A5568) : const Color(0xFFB0BEC5))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Chat button
+              GestureDetector(
+                onTap: () => context.push(() => HubChatPage(device: history.toDevice())),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: kAccentCyan.withValues(alpha: 0.1),
+                    border: Border.all(color: kAccentCyan.withValues(alpha: 0.3)),
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.chat_bubble_rounded, color: kAccentCyan, size: 20),
+                      if (unreadCount > 0)
+                        Positioned(
+                          top: -6,
+                          right: -6,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: const BoxDecoration(shape: BoxShape.circle, color: kAccentCyan),
+                            child: Center(child: Text('$unreadCount', style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold))),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Forget button
+              GestureDetector(
+                onTap: onForget,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.red.withValues(alpha: 0.08),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                  ),
+                  child: Icon(Icons.close_rounded, color: Colors.red.withValues(alpha: 0.6), size: 18),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _deviceIcon(DeviceType type) {
+    switch (type) {
+      case DeviceType.mobile: return Icons.phone_android_rounded;
+      case DeviceType.desktop: return Icons.computer_rounded;
+      case DeviceType.web: return Icons.language_rounded;
+      case DeviceType.headless: return Icons.dns_rounded;
+      case DeviceType.server: return Icons.storage_rounded;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Action button (used in online device card)
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -620,7 +833,6 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: Stack(

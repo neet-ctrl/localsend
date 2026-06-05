@@ -26,6 +26,10 @@ class HubCallNotifier extends Notifier<HubCallState> {
   MediaStream? _localStream;
   Timer? _pollTimer;
 
+  // ICE candidates received before setRemoteDescription — buffer and flush after
+  final List<RTCIceCandidate> _pendingCandidates = [];
+  bool _remoteDescSet = false;
+
   final localRenderer = RTCVideoRenderer();
   final remoteRenderer = RTCVideoRenderer();
 
@@ -44,7 +48,6 @@ class HubCallNotifier extends Notifier<HubCallState> {
           final devicePort = offer['callerPort'] as int? ?? 53317;
           final deviceAlias = offer['callerAlias'] as String? ?? 'Unknown';
           final callType = offer['callType'] == 'video' ? HubCallType.video : HubCallType.voice;
-          // Respect HTTPS flag sent by the caller; default false for LAN.
           final deviceHttps = offer['callerHttps'] as bool? ?? false;
           _log.info(HubLogCategory.calls,
               'Incoming ${callType.name} call from $deviceAlias ($deviceIp:$devicePort https=$deviceHttps)');
@@ -80,18 +83,27 @@ class HubCallNotifier extends Notifier<HubCallState> {
         }
       }
 
-      if (state.status == HubCallStatus.active || state.status == HubCallStatus.outgoing) {
+      if (state.status == HubCallStatus.active ||
+          state.status == HubCallStatus.outgoing ||
+          state.status == HubCallStatus.incoming) {
         final candidates = HubIncomingBuffer.instance.drainIceCandidates();
         for (final c in candidates) {
-          try {
-            _log.info(HubLogCategory.calls, 'Adding ICE candidate: ${c['candidate']}');
-            await _peerConnection?.addCandidate(RTCIceCandidate(
-              c['candidate'] as String?,
-              c['sdpMid'] as String?,
-              c['sdpMLineIndex'] as int?,
-            ));
-          } catch (e) {
-            _log.warn(HubLogCategory.calls, 'Failed to add ICE candidate: $e');
+          final candidate = RTCIceCandidate(
+            c['candidate'] as String?,
+            c['sdpMid'] as String?,
+            c['sdpMLineIndex'] as int?,
+          );
+          if (_remoteDescSet && _peerConnection != null) {
+            try {
+              _log.info(HubLogCategory.calls, 'Adding ICE candidate: ${c['candidate']}');
+              await _peerConnection!.addCandidate(candidate);
+            } catch (e) {
+              _log.warn(HubLogCategory.calls, 'Failed to add ICE candidate: $e');
+            }
+          } else {
+            // Buffer until remote description is set
+            _pendingCandidates.add(candidate);
+            _log.info(HubLogCategory.calls, 'Buffered ICE candidate (remote desc not ready yet)');
           }
         }
         if (HubIncomingBuffer.instance.drainHangup()) {
@@ -102,10 +114,25 @@ class HubCallNotifier extends Notifier<HubCallState> {
     });
   }
 
+  Future<void> _flushPendingCandidates() async {
+    if (_pendingCandidates.isEmpty) return;
+    _log.info(HubLogCategory.calls, 'Flushing ${_pendingCandidates.length} buffered ICE candidates');
+    for (final c in List<RTCIceCandidate>.from(_pendingCandidates)) {
+      try {
+        await _peerConnection?.addCandidate(c);
+      } catch (e) {
+        _log.warn(HubLogCategory.calls, 'Flushed candidate failed: $e');
+      }
+    }
+    _pendingCandidates.clear();
+  }
+
   Future<void> startCall(Device device, HubCallType type) async {
     _log.info(HubLogCategory.calls, 'Starting ${type.name} call to ${device.alias} (${device.ip}:${device.port})');
     try {
       await _initRenderers();
+      _remoteDescSet = false;
+      _pendingCandidates.clear();
       _peerConnection = await _createPeerConnection(device);
 
       final constraints = <String, dynamic>{
@@ -154,7 +181,6 @@ class HubCallNotifier extends Notifier<HubCallState> {
         type: type,
         remoteDevice: device,
       );
-      // Play ringback tone on the caller's side (like carrier "ring ring")
       HubRingbackService.instance.startRingback();
     } catch (e, st) {
       _log.error(HubLogCategory.calls, 'startCall failed: $e\n$st');
@@ -173,6 +199,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
     try {
       await _initRenderers();
+      _remoteDescSet = false;
+      _pendingCandidates.clear();
       _peerConnection = await _createPeerConnection(device);
 
       final type = state.type ?? HubCallType.voice;
@@ -191,6 +219,9 @@ class HubCallNotifier extends Notifier<HubCallState> {
       }
 
       await _peerConnection!.setRemoteDescription(RTCSessionDescription(sdp, sdpType ?? 'offer'));
+      _remoteDescSet = true;
+      await _flushPendingCandidates();
+
       final answer = await _peerConnection!.createAnswer();
       await _peerConnection!.setLocalDescription(answer);
       _log.info(HubLogCategory.calls, 'Created answer SDP, sending to ${device.ip}:${device.port}');
@@ -203,9 +234,13 @@ class HubCallNotifier extends Notifier<HubCallState> {
         });
       }
 
+      // Enable speakerphone by default so both sides hear each other
+      _setSpeakerphone(true);
+
       state = state.copyWith(
         status: HubCallStatus.active,
         startTime: DateTime.now(),
+        isSpeakerOn: true,
         clearIncoming: true,
       );
       _log.info(HubLogCategory.calls, 'Call accepted — now active');
@@ -228,7 +263,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
   Future<void> endCall() async {
     HubRingtoneService.instance.stop();
-    HubRingbackService.instance.stopRingback(); // stop if caller cancelled while outgoing
+    HubRingbackService.instance.stopRingback();
     final device = state.remoteDevice;
     final ip = device?.ip;
     _log.info(HubLogCategory.calls, 'Ending call with ${device?.alias}');
@@ -265,8 +300,18 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   void toggleSpeaker() {
-    state = state.copyWith(isSpeakerOn: !state.isSpeakerOn);
-    _log.info(HubLogCategory.calls, 'Speaker: ${state.isSpeakerOn}');
+    final isSpeaker = !state.isSpeakerOn;
+    _setSpeakerphone(isSpeaker);
+    state = state.copyWith(isSpeakerOn: isSpeaker);
+    _log.info(HubLogCategory.calls, 'Speaker: $isSpeaker');
+  }
+
+  void _setSpeakerphone(bool on) {
+    try {
+      Helper.setSpeakerphoneOn(on);
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'setSpeakerphoneOn($on) failed: $e');
+    }
   }
 
   Future<void> _handleRemoteAnswer(Map<String, dynamic> answer) async {
@@ -274,8 +319,14 @@ class HubCallNotifier extends Notifier<HubCallState> {
       await _peerConnection?.setRemoteDescription(
         RTCSessionDescription(answer['sdp'] as String?, answer['type'] as String?),
       );
-      HubRingbackService.instance.stopRingback(); // call connected — stop ringback
-      state = state.copyWith(status: HubCallStatus.active, startTime: DateTime.now());
+      _remoteDescSet = true;
+      await _flushPendingCandidates();
+
+      // Enable speakerphone by default on call connect
+      _setSpeakerphone(true);
+
+      HubRingbackService.instance.stopRingback();
+      state = state.copyWith(status: HubCallStatus.active, startTime: DateTime.now(), isSpeakerOn: true);
       _log.info(HubLogCategory.calls, 'Remote answer applied — call active');
     } catch (e) {
       _log.error(HubLogCategory.calls, 'setRemoteDescription (answer) failed: $e');
@@ -306,7 +357,12 @@ class HubCallNotifier extends Notifier<HubCallState> {
       if (event.streams.isNotEmpty) {
         _log.info(HubLogCategory.calls, 'Remote track received (${event.track.kind})');
         remoteRenderer.srcObject = event.streams.first;
-        state = state.copyWith(status: HubCallStatus.active, startTime: state.startTime ?? DateTime.now());
+        // Force a state refresh so RTCVideoView widgets rebuild with the new stream
+        state = state.copyWith(
+          status: HubCallStatus.active,
+          startTime: state.startTime ?? DateTime.now(),
+          hasRemoteTrack: true,
+        );
       }
     };
 
@@ -318,8 +374,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
       }
     };
 
-    pc.onIceConnectionState = (state) {
-      _log.info(HubLogCategory.calls, 'ICE connection state: $state');
+    pc.onIceConnectionState = (s) {
+      _log.info(HubLogCategory.calls, 'ICE connection state: $s');
     };
 
     return pc;
@@ -335,6 +391,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   Future<void> _cleanup() async {
+    _remoteDescSet = false;
+    _pendingCandidates.clear();
     _localStream?.getTracks().forEach((t) => t.stop());
     _localStream?.dispose();
     _localStream = null;
@@ -347,8 +405,6 @@ class HubCallNotifier extends Notifier<HubCallState> {
     _log.info(HubLogCategory.calls, 'Call resources cleaned up');
   }
 
-  /// POST to a remote Hub endpoint. Uses [lanHttpClient] so self-signed TLS
-  /// certificates are accepted — LocalSend LAN devices always use self-signed certs.
   Future<void> _httpPost(String ip, int port, bool https, String path, Map<String, dynamic> body) async {
     final scheme = https ? 'https' : 'http';
     final url = '$scheme://$ip:$port$path';
