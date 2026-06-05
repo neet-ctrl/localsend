@@ -17,12 +17,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch upstream core Rust crate
+      - name: Fetch core Rust crate from upstream
         run: |
-          git clone --depth 1 --filter=blob:none --sparse \
-            https://github.com/localsend/localsend.git _upstream
-          cd _upstream && git sparse-checkout set core
-          cp -r core ../ && cd .. && rm -rf _upstream
+          WORKSPACE="${{ github.workspace }}"
+          CORE_DEST="$WORKSPACE/core"
+
+          # Already present (e.g. cached layer) — skip
+          if [ -f "$CORE_DEST/Cargo.toml" ]; then
+            echo "core/Cargo.toml already exists — skipping fetch."
+            exit 0
+          fi
+
+          echo "Cloning upstream localsend repo to /tmp/ls-upstream ..."
+          git clone --depth 1 https://github.com/localsend/localsend.git /tmp/ls-upstream
+
+          # Locate core/Cargo.toml anywhere in the cloned repo
+          CORE_SRC=$(find /tmp/ls-upstream -maxdepth 3 -name "Cargo.toml" \
+            -path "*/core/Cargo.toml" | head -1 | xargs -I{} dirname {})
+
+          if [ -z "$CORE_SRC" ]; then
+            echo "ERROR: could not find core/Cargo.toml in upstream repo!"
+            find /tmp/ls-upstream -name "Cargo.toml" | head -20
+            exit 1
+          fi
+
+          echo "Found core crate at: $CORE_SRC"
+          cp -r "$CORE_SRC" "$CORE_DEST"
+          rm -rf /tmp/ls-upstream
+
+          # Verify
+          if [ ! -f "$CORE_DEST/Cargo.toml" ]; then
+            echo "ERROR: core/Cargo.toml still missing after copy!"
+            exit 1
+          fi
+          echo "core/Cargo.toml successfully placed at $CORE_DEST"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
