@@ -37,6 +37,8 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
     Permission.microphone,
     Permission.camera,
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) Permission.notification,
+    if (Platform.isAndroid) Permission.bluetoothConnect,
+    if (Platform.isAndroid) Permission.storage,
   ];
 
   @override
@@ -230,6 +232,8 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
     if (p == Permission.microphone) return 'Microphone — Voice & Video Calls';
     if (p == Permission.camera) return 'Camera — Video Calls';
     if (p == Permission.notification) return 'Notifications — Incoming Calls & Messages';
+    if (p == Permission.bluetoothConnect) return 'Bluetooth — Nearby Device Communication';
+    if (p == Permission.storage) return 'Storage — Browse & Download Files';
     return p.toString();
   }
 
@@ -237,6 +241,8 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
     if (p == Permission.microphone) return Icons.mic_rounded;
     if (p == Permission.camera) return Icons.videocam_rounded;
     if (p == Permission.notification) return Icons.notifications_rounded;
+    if (p == Permission.bluetoothConnect) return Icons.bluetooth_rounded;
+    if (p == Permission.storage) return Icons.folder_rounded;
     return Icons.lock_rounded;
   }
 
