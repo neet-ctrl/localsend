@@ -266,8 +266,9 @@ class _HubVoiceCallPageState extends State<HubVoiceCallPage>
             color: Colors.red,
             label: 'Decline',
             onTap: () {
+              // rejectCall() sets state → idle (not ended), so we pop manually.
               ref.notifier(hubCallProvider).rejectCall();
-              context.pop();
+              if (context.mounted) context.pop();
             },
           ),
           const SizedBox(width: 56),
@@ -311,14 +312,14 @@ class _HubVoiceCallPageState extends State<HubVoiceCallPage>
           ),
           const SizedBox(height: 32),
         ],
+        // Do NOT call context.pop() here — endCall() transitions to
+        // HubCallStatus.ended which the build() watcher uses to pop cleanly.
+        // Popping here too causes a double-pop that can crash the navigator.
         _CallButton(
           icon: Icons.call_end_rounded,
           color: Colors.red,
           label: callState.status == HubCallStatus.outgoing ? 'Cancel' : 'End Call',
-          onTap: () {
-            ref.notifier(hubCallProvider).endCall();
-            context.pop();
-          },
+          onTap: () => ref.notifier(hubCallProvider).endCall(),
         ),
       ],
     );

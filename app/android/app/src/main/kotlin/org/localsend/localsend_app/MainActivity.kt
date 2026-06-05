@@ -2,14 +2,20 @@ package org.localsend.localsend_app
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.Settings
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -22,12 +28,15 @@ private const val REQUEST_CODE_PICK_DIRECTORY = 1
 private const val REQUEST_CODE_PICK_DIRECTORY_PATH = 2
 private const val REQUEST_CODE_PICK_FILE = 3
 
+private const val CALL_CHANNEL_ID   = "localsend_incoming_call"
+private const val CALL_CHANNEL_NAME = "Incoming Calls"
+private const val INCOMING_CALL_NOTIFICATION_ID = 1002
+
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
     private var ringbackTone: ToneGenerator? = null
+    private var methodChannel: MethodChannel? = null
 
-    // Overriding the static methods we need from the Java class, as described
-    // in the documentation of `FlutterActivity.NewEngineIntentBuilder`
     companion object {
         fun withNewEngine(): NewEngineIntentBuilder {
             return NewEngineIntentBuilder(MainActivity::class.java)
@@ -38,8 +47,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Reuse the Flutter engine that the background service may have already started.
-    // This avoids a second engine and a port conflict with the running server.
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
         val cached = FlutterEngineCache.getInstance().get(HUB_ENGINE_ID)
         if (cached != null) return cached
@@ -48,10 +55,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            CHANNEL
-        ).setMethodCallHandler { call, result ->
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        methodChannel = channel
+        channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startHubService" -> {
                     HubForegroundService.start(applicationContext)
@@ -95,9 +101,6 @@ class MainActivity : FlutterActivity() {
                 }
 
                 // ── Ringback tone (caller side) ─────────────────────────────
-                // Uses ToneGenerator.TONE_SUP_RINGTONE — the ITU-T ringback
-                // supervisory tone, exactly what carrier networks play on the
-                // caller's handset while the remote side rings.
                 "startRingback" -> {
                     try {
                         ringbackTone?.release()
@@ -121,21 +124,22 @@ class MainActivity : FlutterActivity() {
                 }
 
                 // ── Call audio mode ──────────────────────────────────────────
-                // Must be called when a call becomes active / ends.
-                // Without MODE_IN_COMMUNICATION Android won't route audio
-                // through the earpiece/speaker path used by WebRTC, and echo
-                // cancellation + noise suppression won't engage.
+                // MODE_IN_COMMUNICATION enables hardware AEC / NS and earpiece
+                // routing that WebRTC requires.  Must be set BEFORE getUserMedia.
+                // FLAG_KEEP_SCREEN_ON is toggled here so the screen stays on
+                // during a call and turns off cleanly when it ends.
                 "setCallAudioMode" -> {
                     try {
                         val active = call.argument<Boolean>("active") ?: false
                         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
                         if (active) {
                             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                            // Default to earpiece; Flutter side calls setSpeakerphoneOn separately
                             audioManager.isSpeakerphoneOn = false
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         } else {
                             audioManager.isSpeakerphoneOn = false
                             audioManager.mode = AudioManager.MODE_NORMAL
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         }
                         result.success(null)
                     } catch (e: Exception) {
@@ -143,14 +147,147 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                // ── Incoming call notification ───────────────────────────────
+                // Shows a heads-up / full-screen notification so the user can
+                // see who is calling and Accept or Decline without opening the
+                // app manually.  On Android 10+ the full-screen intent also
+                // wakes the screen and shows over the lock screen.
+                "showIncomingCallNotification" -> {
+                    try {
+                        val callerName = call.argument<String>("callerName") ?: "Unknown"
+                        val callType   = call.argument<String>("callType")   ?: "voice"
+                        showIncomingCallNotification(callerName, callType)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("NOTIFICATION_ERROR", e.message, null)
+                    }
+                }
+
+                "dismissCallNotification" -> {
+                    try {
+                        dismissCallNotification()
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("NOTIFICATION_ERROR", e.message, null)
+                    }
+                }
+
                 else -> result.notImplemented()
             }
         }
+
+        // Handle callAction that was delivered via intent BEFORE the engine
+        // was ready (i.e. cold start from a notification tap).
+        handleCallActionIntent(intent)
     }
 
-    private fun isAnimationsEnabled() : Boolean {
-        return Settings.Global.getFloat(this.getContentResolver(),
-            Settings.Global.ANIMATOR_DURATION_SCALE, 1.0f) != 0.0f;
+    // ── onNewIntent: notification button tapped while app is already running ──
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCallActionIntent(intent)
+    }
+
+    private fun handleCallActionIntent(intent: Intent?) {
+        val action = intent?.getStringExtra("callAction") ?: return
+        // Remove so we don't fire it again on the next resume
+        intent.removeExtra("callAction")
+        methodChannel?.invokeMethod("notificationCallAction", action)
+    }
+
+    // ── Incoming call notification helpers ────────────────────────────────────
+
+    private fun createCallNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        if (nm.getNotificationChannel(CALL_CHANNEL_ID) != null) return
+        val channel = NotificationChannel(
+            CALL_CHANNEL_ID,
+            CALL_CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Incoming LocalSend voice and video calls"
+            setShowBadge(true)
+            enableVibration(true)
+            enableLights(true)
+        }
+        nm.createNotificationChannel(channel)
+    }
+
+    private fun showIncomingCallNotification(callerName: String, callType: String) {
+        createCallNotificationChannel()
+
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+
+        // ── full-screen / heads-up intent → opens app ─────────────────────
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("callAction", "open")
+        }
+        val openPi = PendingIntent.getActivity(
+            this, 10, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // ── Accept button ─────────────────────────────────────────────────
+        val acceptIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("callAction", "accept")
+        }
+        val acceptPi = PendingIntent.getActivity(
+            this, 11, acceptIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // ── Decline button ────────────────────────────────────────────────
+        val declineIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("callAction", "decline")
+        }
+        val declinePi = PendingIntent.getActivity(
+            this, 12, declineIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = if (callType == "video") "Incoming Video Call" else "Incoming Voice Call"
+
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CALL_CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
+
+        builder
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setContentTitle(title)
+            .setContentText(callerName)
+            .setContentIntent(openPi)
+            .setFullScreenIntent(openPi, true)   // shows over lock screen / other apps
+            .addAction(android.R.drawable.ic_menu_call,   "Accept",  acceptPi)
+            .addAction(android.R.drawable.ic_menu_delete, "Decline", declinePi)
+            .setOngoing(true)
+            .setAutoCancel(false)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            builder.setCategory(Notification.CATEGORY_CALL)
+        }
+
+        nm.notify(INCOMING_CALL_NOTIFICATION_ID, builder.build())
+    }
+
+    private fun dismissCallNotification() {
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        nm.cancel(INCOMING_CALL_NOTIFICATION_ID)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun isAnimationsEnabled(): Boolean {
+        return Settings.Global.getFloat(
+            this.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE, 1.0f
+        ) != 0.0f
     }
 
     private fun openDirectoryPicker(onlyPath: Boolean) {
@@ -272,7 +409,6 @@ class MainActivity : FlutterActivity() {
 
         for (file in pickedDir.listFiles()) {
             if (file.isDirectory) {
-                // Recursive call
                 listFiles(file.uri, files)
             } else if (file.isFile) {
                 files.add(
@@ -308,23 +444,22 @@ class MainActivity : FlutterActivity() {
     private fun folderExists(documentUri: Uri, folderName: String): Boolean {
         var cursor: Cursor? = null
         try {
-            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(documentUri, DocumentsContract.getDocumentId(documentUri))
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+                documentUri, DocumentsContract.getDocumentId(documentUri)
+            )
             cursor = contentResolver.query(
                 childrenUri,
                 arrayOf(
                     DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                     DocumentsContract.Document.COLUMN_MIME_TYPE
                 ),
-                null,
-                null,
-                null,
+                null, null, null,
             )
 
             if (cursor != null) {
                 while (cursor.moveToNext()) {
                     val displayName = cursor.getString(0)
                     val mimeType = cursor.getString(1)
-
                     if (folderName == displayName && DocumentsContract.Document.MIME_TYPE_DIR == mimeType) {
                         return true
                     }

@@ -30,24 +30,39 @@ class HubCallNotifier extends Notifier<HubCallState> {
   MediaStream? _localStream;
   Timer? _pollTimer;
 
+  // Guard against reentrant endCall() calls (e.g. triggered by onConnectionState
+  // firing during peerConnection.close()).
+  bool _isEnding = false;
+
   // ICE candidates that arrived before setRemoteDescription — buffered, then flushed
   final List<RTCIceCandidate> _pendingCandidates = [];
   bool _remoteDescSet = false;
 
   final localRenderer = RTCVideoRenderer();
   final remoteRenderer = RTCVideoRenderer();
+  bool _renderersInitialized = false;
 
   @override
   HubCallState init() {
+    // Listen for incoming accept/decline actions triggered by notification buttons
+    _platform.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'notificationCallAction':
+          final action = call.arguments as String?;
+          _log.info(HubLogCategory.calls, 'Notification action received: $action');
+          if (action == 'accept' && state.status == HubCallStatus.incoming) {
+            await acceptCall();
+          } else if (action == 'decline' && state.status == HubCallStatus.incoming) {
+            await rejectCall();
+          }
+          break;
+      }
+    });
     _startPolling();
     return const HubCallState();
   }
 
   // ─── Platform audio mode ──────────────────────────────────────────────────
-  // Sets Android AudioManager.MODE_IN_COMMUNICATION so the OS routes audio
-  // through the earpiece/speaker path used by WebRTC and engages hardware
-  // echo-cancellation and noise-suppression. On iOS this is a no-op (AVAudioSession
-  // is handled internally by WebRTC).
   Future<void> _setCallAudioMode(bool active) async {
     if (!Platform.isAndroid) return;
     try {
@@ -58,15 +73,30 @@ class HubCallNotifier extends Notifier<HubCallState> {
     }
   }
 
+  // ─── Incoming call notification ───────────────────────────────────────────
+  Future<void> _showIncomingCallNotification(String callerName, HubCallType type) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _platform.invokeMethod('showIncomingCallNotification', {
+        'callerName': callerName,
+        'callType': type.name,
+      });
+      _log.info(HubLogCategory.calls, 'showIncomingCallNotification($callerName) OK');
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'showIncomingCallNotification error: $e');
+    }
+  }
+
+  Future<void> _dismissCallNotification() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _platform.invokeMethod('dismissCallNotification');
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'dismissCallNotification error: $e');
+    }
+  }
+
   // ─── ICE gathering — Jami approach ───────────────────────────────────────
-  // Jami gathers ALL ICE candidates first, embeds them in the SDP, then
-  // sends ONE complete SDP with no trickle-ICE signalling needed.
-  // We do the same: after setLocalDescription we wait for
-  // RTCIceGatheringStateComplete (up to 10 s) then read back the final
-  // localDescription — which now contains all `a=candidate:` lines.
-  // The remote side calls setRemoteDescription(completeSdp) and ICE
-  // negotiation starts immediately with every candidate already available,
-  // eliminating all timing races.
   Future<RTCSessionDescription> _waitForGatheringComplete(
     RTCSessionDescription fallback,
   ) async {
@@ -125,6 +155,9 @@ class HubCallNotifier extends Notifier<HubCallState> {
             incomingSdpType: offer['type'] as String?,
           );
           HubRingtoneService.instance.start();
+          // Show heads-up / full-screen notification so user sees the call
+          // even when on another app or the screen is locked.
+          await _showIncomingCallNotification(deviceAlias, callType);
         }
       }
 
@@ -138,9 +171,6 @@ class HubCallNotifier extends Notifier<HubCallState> {
       }
 
       // Active / outgoing / incoming: process trickle-ICE candidates (fallback)
-      // If both sides use the complete-gathering approach the remote SDP already
-      // contains all candidates and addCandidate is rarely needed. We keep it
-      // as a fallback for cross-client compatibility.
       if (state.status == HubCallStatus.active ||
           state.status == HubCallStatus.outgoing ||
           state.status == HubCallStatus.incoming) {
@@ -153,14 +183,12 @@ class HubCallNotifier extends Notifier<HubCallState> {
           );
           if (_remoteDescSet && _peerConnection != null) {
             try {
-              _log.info(HubLogCategory.calls, 'Adding trickle ICE candidate: ${c['candidate']}');
               await _peerConnection!.addCandidate(candidate);
             } catch (e) {
               _log.warn(HubLogCategory.calls, 'Failed to add trickle candidate: $e');
             }
           } else {
             _pendingCandidates.add(candidate);
-            _log.info(HubLogCategory.calls, 'Buffered trickle ICE candidate (remote desc pending)');
           }
         }
 
@@ -190,6 +218,10 @@ class HubCallNotifier extends Notifier<HubCallState> {
     _log.info(HubLogCategory.calls,
         'Starting ${type.name} call to ${device.alias} (${device.ip}:${device.port})');
     try {
+      // Set audio mode FIRST so WebRTC routes audio through the right path
+      // from the very beginning (earpiece/speaker, hardware AEC/NS).
+      await _setCallAudioMode(true);
+
       await _initRenderers();
       _remoteDescSet = false;
       _pendingCandidates.clear();
@@ -208,7 +240,6 @@ class HubCallNotifier extends Notifier<HubCallState> {
       }
       if (type == HubCallType.video) localRenderer.srcObject = _localStream;
 
-      // ── Jami ICE approach: gather ALL candidates before sending SDP ──────
       final initialOffer = await _peerConnection!.createOffer();
       await _peerConnection!.setLocalDescription(initialOffer);
       _log.info(HubLogCategory.calls, 'Waiting for ICE gathering to complete...');
@@ -218,6 +249,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
       final myAlias = ref.read(settingsProvider).alias;
       final myPort = ref.read(serverProvider)?.port ?? 53317;
+      // Use OUR OWN https setting, not the remote device's.
+      final myHttps = ref.read(serverProvider)?.https ?? false;
       final myFingerprint = ref.read(securityProvider).certificateHash;
       final ip = device.ip;
       if (ip != null) {
@@ -228,7 +261,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
           'callerAlias': myAlias,
           'callerPort': myPort,
           'callerFingerprint': myFingerprint,
-          'callerHttps': device.https,
+          'callerHttps': myHttps,
         });
       }
 
@@ -249,6 +282,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
   // ─── Accept incoming call ─────────────────────────────────────────────────
   Future<void> acceptCall() async {
     HubRingtoneService.instance.stop();
+    await _dismissCallNotification();
     final sdp = state.incomingSdp;
     final sdpType = state.incomingSdpType;
     final device = state.remoteDevice;
@@ -256,6 +290,11 @@ class HubCallNotifier extends Notifier<HubCallState> {
     _log.info(HubLogCategory.calls, 'Accepting call from ${device.alias}');
 
     try {
+      // Set audio mode FIRST — must be done before getUserMedia so Android
+      // routes audio through MODE_IN_COMMUNICATION from the start.
+      await _setCallAudioMode(true);
+      _setSpeakerphone(true);
+
       await _initRenderers();
       _remoteDescSet = false;
       _pendingCandidates.clear();
@@ -274,14 +313,12 @@ class HubCallNotifier extends Notifier<HubCallState> {
       }
       if (type == HubCallType.video) localRenderer.srcObject = _localStream;
 
-      // Remote offer already contains all candidates (complete-gathering approach)
       await _peerConnection!.setRemoteDescription(
         RTCSessionDescription(sdp, sdpType ?? 'offer'),
       );
       _remoteDescSet = true;
       await _flushPendingCandidates();
 
-      // ── Jami ICE approach: gather ALL candidates before sending answer ────
       final initialAnswer = await _peerConnection!.createAnswer();
       await _peerConnection!.setLocalDescription(initialAnswer);
       _log.info(HubLogCategory.calls, 'Waiting for ICE gathering to complete (callee)...');
@@ -296,10 +333,6 @@ class HubCallNotifier extends Notifier<HubCallState> {
           'type': completeAnswer.type,
         });
       }
-
-      // Enable Android call audio mode + speakerphone
-      await _setCallAudioMode(true);
-      _setSpeakerphone(true);
 
       state = state.copyWith(
         status: HubCallStatus.active,
@@ -317,6 +350,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
   Future<void> rejectCall() async {
     HubRingtoneService.instance.stop();
+    await _dismissCallNotification();
     final device = state.remoteDevice;
     final ip = device?.ip;
     _log.info(HubLogCategory.calls, 'Rejecting call from ${device?.alias}');
@@ -327,22 +361,35 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   Future<void> endCall() async {
-    HubRingtoneService.instance.stop();
-    HubRingbackService.instance.stopRingback();
-    final device = state.remoteDevice;
-    final ip = device?.ip;
-    _log.info(HubLogCategory.calls, 'Ending call with ${device?.alias}');
-    if (ip != null) {
-      try {
-        await _httpPost(ip, device!.port, device.https, '/hub/call/hangup', {});
-      } catch (e) {
-        _log.warn(HubLogCategory.calls, 'Hangup POST failed (ignored): $e');
-      }
+    // Guard against reentrant calls (e.g. onConnectionState firing during
+    // peerConnection.close() → would call endCall() again → crash).
+    if (_isEnding) {
+      _log.warn(HubLogCategory.calls, 'endCall() already in progress — ignoring reentrant call');
+      return;
     }
-    await _cleanup();
-    state = const HubCallState(status: HubCallStatus.ended);
-    await Future.delayed(const Duration(seconds: 2));
-    state = const HubCallState();
+    _isEnding = true;
+
+    try {
+      HubRingtoneService.instance.stop();
+      HubRingbackService.instance.stopRingback();
+      await _dismissCallNotification();
+      final device = state.remoteDevice;
+      final ip = device?.ip;
+      _log.info(HubLogCategory.calls, 'Ending call with ${device?.alias}');
+      if (ip != null) {
+        try {
+          await _httpPost(ip, device!.port, device.https, '/hub/call/hangup', {});
+        } catch (e) {
+          _log.warn(HubLogCategory.calls, 'Hangup POST failed (ignored): $e');
+        }
+      }
+      await _cleanup();
+      state = const HubCallState(status: HubCallStatus.ended);
+      await Future.delayed(const Duration(seconds: 2));
+      state = const HubCallState();
+    } finally {
+      _isEnding = false;
+    }
   }
 
   void toggleMute() {
@@ -382,14 +429,13 @@ class HubCallNotifier extends Notifier<HubCallState> {
   // ─── Handle remote answer (caller side) ──────────────────────────────────
   Future<void> _handleRemoteAnswer(Map<String, dynamic> answer) async {
     try {
-      // Remote answer SDP already contains all candidates (complete-gathering approach)
       await _peerConnection?.setRemoteDescription(
         RTCSessionDescription(answer['sdp'] as String?, answer['type'] as String?),
       );
       _remoteDescSet = true;
       await _flushPendingCandidates();
 
-      await _setCallAudioMode(true);
+      // Audio mode was already set in startCall(); enable speakerphone now.
       _setSpeakerphone(true);
 
       HubRingbackService.instance.stopRingback();
@@ -410,14 +456,10 @@ class HubCallNotifier extends Notifier<HubCallState> {
     final config = <String, dynamic>{
       'iceServers': [],
       'sdpSemantics': 'unified-plan',
-      // Restrict to local network candidates only (no server-reflexive, no relay)
       'iceTransportPolicy': 'all',
     };
     final pc = await createPeerConnection(config);
 
-    // Still forward trickle ICE candidates to remote as a best-effort fallback.
-    // If the remote side supports the complete-gathering approach, these will
-    // simply be ignored (the SDP already had all the candidates).
     pc.onIceCandidate = (candidate) async {
       final ip = device.ip;
       if (ip != null && candidate.candidate != null && candidate.candidate!.isNotEmpty) {
@@ -444,8 +486,14 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
     pc.onConnectionState = (connectionState) {
       _log.info(HubLogCategory.calls, 'PeerConnection state: $connectionState');
-      if (connectionState == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          connectionState == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+      // Do NOT call endCall() directly from here — doing so while peerConnection.close()
+      // is running creates a reentrant endCall() that crashes the app (black screen).
+      // The poll loop handles remote hangup via drainHangup(). For unexpected
+      // disconnects, trigger endCall only when _isEnding is false.
+      if (!_isEnding &&
+          (connectionState == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+           connectionState == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected)) {
+        _log.info(HubLogCategory.calls, 'Connection dropped unexpectedly — ending call');
         endCall();
       }
     };
@@ -458,9 +506,11 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   Future<void> _initRenderers() async {
+    if (_renderersInitialized) return;
     try {
       await localRenderer.initialize();
       await remoteRenderer.initialize();
+      _renderersInitialized = true;
     } catch (e) {
       _log.warn(HubLogCategory.calls, 'Renderer init error (non-fatal): $e');
     }
@@ -469,15 +519,31 @@ class HubCallNotifier extends Notifier<HubCallState> {
   Future<void> _cleanup() async {
     _remoteDescSet = false;
     _pendingCandidates.clear();
+
+    // Stop and dispose local media tracks
     _localStream?.getTracks().forEach((t) => t.stop());
     _localStream?.dispose();
     _localStream = null;
-    await _peerConnection?.close();
+
+    // Null out the peer connection BEFORE closing it.
+    // This prevents the onConnectionState callback from firing and
+    // triggering a reentrant endCall() while close() is running.
+    final pc = _peerConnection;
     _peerConnection = null;
+    try {
+      await pc?.close();
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'peerConnection.close() error (ignored): $e');
+    }
+
+    // Clear renderer sources — do NOT dispose them here. The renderers are
+    // notifier-lifetime objects reused across calls. Disposing them between
+    // calls causes "initialized on a disposed renderer" crashes on the next call.
     try {
       localRenderer.srcObject = null;
       remoteRenderer.srcObject = null;
     } catch (_) {}
+
     await _setCallAudioMode(false);
     _log.info(HubLogCategory.calls, 'Call resources cleaned up');
   }
