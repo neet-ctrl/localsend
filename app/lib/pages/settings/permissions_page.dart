@@ -68,7 +68,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         ),
       if (Platform.isAndroid)
         _PermEntry(
-          permission: Permission.storage,
+          permission: Permission.manageExternalStorage,
           icon: Icons.folder_rounded,
           label: 'Storage',
           description: 'Required to browse and download shared files.',
