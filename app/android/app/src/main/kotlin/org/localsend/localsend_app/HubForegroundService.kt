@@ -3,6 +3,7 @@ package org.localsend.localsend_app
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import io.flutter.FlutterInjector
@@ -23,7 +24,15 @@ class HubForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(HUB_NOTIFICATION_ID, buildNotification())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                HUB_NOTIFICATION_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+        } else {
+            startForeground(HUB_NOTIFICATION_ID, buildNotification())
+        }
         ensureFlutterEngine()
         return START_STICKY
     }
