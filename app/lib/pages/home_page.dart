@@ -6,11 +6,17 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/config/init.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/gen/strings.g.dart';
+import 'package:localsend_app/model/hub/hub_call_state.dart';
+import 'package:localsend_app/model/hub/hub_message.dart';
 import 'package:localsend_app/pages/home_page_controller.dart';
+import 'package:localsend_app/pages/hub/hub_video_call_page.dart';
+import 'package:localsend_app/pages/hub/hub_voice_call_page.dart';
 import 'package:localsend_app/pages/tabs/communication_hub_tab.dart';
 import 'package:localsend_app/pages/tabs/receive_tab.dart';
 import 'package:localsend_app/pages/tabs/send_tab.dart';
 import 'package:localsend_app/pages/tabs/settings_tab.dart';
+import 'package:localsend_app/provider/hub/hub_call_provider.dart';
+import 'package:localsend_app/provider/hub/hub_chat_provider.dart';
 import 'package:localsend_app/provider/selection/selected_sending_files_provider.dart';
 import 'package:localsend_app/util/native/cross_file_converters.dart';
 import 'package:localsend_app/util/native/platform_check.dart';
@@ -61,6 +67,14 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with Refena {
   bool _dragAndDropIndicator = false;
 
+  // Call overlay tracking
+  HubCallStatus? _prevCallStatus;
+  bool _callOverlayShown = false;
+
+  // Chat notification tracking
+  bool _chatReady = false;
+  int _prevTotalUnread = 0;
+
   @override
   void initState() {
     super.initState();
@@ -68,7 +82,128 @@ class _HomePageState extends State<HomePage> with Refena {
     ensureRef((ref) async {
       ref.redux(homePageControllerProvider).dispatch(ChangeTabAction(widget.initialTab));
       await postInit(context, ref, widget.appStart);
+      // Allow a warm-up period before showing chat notifications so
+      // persisted unread counts don't fire false banners on startup.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (mounted) setState(() => _chatReady = true);
     });
+  }
+
+  // ── Call overlay ──────────────────────────────────────────────────────────
+
+  void _handleCallState(BuildContext context, HubCallState callState) {
+    final isNewIncoming = callState.status == HubCallStatus.incoming &&
+        _prevCallStatus != HubCallStatus.incoming &&
+        !_callOverlayShown;
+
+    if (isNewIncoming) {
+      _callOverlayShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final page = callState.type == HubCallType.video
+            ? const HubVideoCallPage()
+            : const HubVoiceCallPage();
+        Navigator.of(context, rootNavigator: true)
+            .push(
+              PageRouteBuilder<void>(
+                fullscreenDialog: true,
+                transitionDuration: const Duration(milliseconds: 400),
+                pageBuilder: (ctx, animation, _) => FadeTransition(
+                  opacity: animation,
+                  child: page,
+                ),
+              ),
+            )
+            .then((_) => _callOverlayShown = false);
+      });
+    }
+
+    // Reset flag when call becomes idle/ended so next call works
+    if (callState.status == HubCallStatus.idle ||
+        callState.status == HubCallStatus.ended) {
+      _callOverlayShown = false;
+    }
+
+    _prevCallStatus = callState.status;
+  }
+
+  // ── Chat banner ───────────────────────────────────────────────────────────
+
+  void _handleChatState(BuildContext context, HubChatState chatState, HomeTab currentTab) {
+    final totalUnread = chatState.conversations.keys
+        .fold<int>(0, (sum, fp) => sum + chatState.unreadCount(fp));
+
+    if (_chatReady && totalUnread > _prevTotalUnread && currentTab != HomeTab.communicationHub) {
+      // Find the latest unread message to show in the banner
+      String senderAlias = 'New message';
+      String preview = '';
+      int latestTs = 0;
+      for (final fp in chatState.conversations.keys) {
+        final unread = chatState.messagesFor(fp)
+            .where((m) => !m.read && m.senderFingerprint == fp);
+        for (final msg in unread) {
+          if (msg.timestamp > latestTs) {
+            latestTs = msg.timestamp;
+            senderAlias = msg.senderAlias;
+            preview = msg.type == HubMessageType.text
+                ? msg.content
+                : '📎 ${msg.fileName ?? 'File'}';
+          }
+        }
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: const Color(0xFF0D1220),
+            content: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: kAccentCyan.withValues(alpha: 0.15),
+                    border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(Icons.chat_bubble_rounded, color: kAccentCyan, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        senderAlias,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        preview,
+                        style: const TextStyle(color: Color(0xFF8899BB), fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      });
+    }
+
+    _prevTotalUnread = totalUnread;
   }
 
   @override
@@ -76,6 +211,12 @@ class _HomePageState extends State<HomePage> with Refena {
     Translations.of(context); // rebuild on locale change
     final vm = context.watch(homePageControllerProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Watch hub state for overlay + banner triggers
+    final callState = context.watch(hubCallProvider);
+    final chatState = context.watch(hubChatProvider);
+    _handleCallState(context, callState);
+    _handleChatState(context, chatState, vm.currentTab);
 
     return DropTarget(
       onDragEntered: (_) {

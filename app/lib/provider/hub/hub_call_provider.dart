@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:common/model/device.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:localsend_app/model/hub/hub_call_state.dart';
+import 'package:localsend_app/provider/hub/hub_ringtone_service.dart';
 import 'package:localsend_app/provider/network/server/controller/hub_controller.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:refena_flutter/refena_flutter.dart';
@@ -56,6 +57,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
             incomingSdp: offer['sdp'] as String?,
             incomingSdpType: offer['type'] as String?,
           );
+          HubRingtoneService.instance.start();
         }
       }
 
@@ -134,6 +136,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   Future<void> acceptCall() async {
+    HubRingtoneService.instance.stop();
     final sdp = state.incomingSdp;
     final sdpType = state.incomingSdpType;
     final device = state.remoteDevice;
@@ -181,6 +184,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   Future<void> rejectCall() async {
+    HubRingtoneService.instance.stop();
     final device = state.remoteDevice;
     final ip = device?.ip;
     if (ip != null) {
@@ -190,6 +194,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
   }
 
   Future<void> endCall() async {
+    HubRingtoneService.instance.stop();
     final device = state.remoteDevice;
     final ip = device?.ip;
     if (ip != null) {
@@ -234,9 +239,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
   Future<RTCPeerConnection> _createPeerConnection(Device device) async {
     final config = <String, dynamic>{
-      'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-      ],
+      'iceServers': [], // LAN-only — no external STUN needed, fully offline
       'sdpSemantics': 'unified-plan',
     };
     final pc = await createPeerConnection(config);
