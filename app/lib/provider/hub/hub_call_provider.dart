@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:common/model/device.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:localsend_app/model/hub/hub_call_state.dart';
 import 'package:localsend_app/provider/hub/hub_ringback_service.dart';
@@ -17,6 +18,9 @@ import 'package:refena_flutter/refena_flutter.dart';
 
 final _log = HubLogger.instance;
 
+// MethodChannel shared with MainActivity / HubForegroundService
+const _platform = MethodChannel('org.localsend.localsend_app/localsend');
+
 final hubCallProvider = NotifierProvider<HubCallNotifier, HubCallState>(
   (ref) => HubCallNotifier(),
 );
@@ -26,7 +30,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
   MediaStream? _localStream;
   Timer? _pollTimer;
 
-  // ICE candidates received before setRemoteDescription — buffer and flush after
+  // ICE candidates that arrived before setRemoteDescription — buffered, then flushed
   final List<RTCIceCandidate> _pendingCandidates = [];
   bool _remoteDescSet = false;
 
@@ -39,8 +43,57 @@ class HubCallNotifier extends Notifier<HubCallState> {
     return const HubCallState();
   }
 
+  // ─── Platform audio mode ──────────────────────────────────────────────────
+  // Sets Android AudioManager.MODE_IN_COMMUNICATION so the OS routes audio
+  // through the earpiece/speaker path used by WebRTC and engages hardware
+  // echo-cancellation and noise-suppression. On iOS this is a no-op (AVAudioSession
+  // is handled internally by WebRTC).
+  Future<void> _setCallAudioMode(bool active) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _platform.invokeMethod('setCallAudioMode', {'active': active});
+      _log.info(HubLogCategory.calls, 'setCallAudioMode($active) OK');
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'setCallAudioMode($active) error: $e');
+    }
+  }
+
+  // ─── ICE gathering — Jami approach ───────────────────────────────────────
+  // Jami gathers ALL ICE candidates first, embeds them in the SDP, then
+  // sends ONE complete SDP with no trickle-ICE signalling needed.
+  // We do the same: after setLocalDescription we wait for
+  // RTCIceGatheringStateComplete (up to 10 s) then read back the final
+  // localDescription — which now contains all `a=candidate:` lines.
+  // The remote side calls setRemoteDescription(completeSdp) and ICE
+  // negotiation starts immediately with every candidate already available,
+  // eliminating all timing races.
+  Future<RTCSessionDescription> _waitForGatheringComplete(
+    RTCSessionDescription fallback,
+  ) async {
+    final completer = Completer<void>();
+
+    _peerConnection!.onIceGatheringState = (RTCIceGatheringState s) {
+      _log.info(HubLogCategory.calls, 'ICE gathering state: $s');
+      if (s == RTCIceGatheringState.RTCIceGatheringStateComplete &&
+          !completer.isCompleted) {
+        completer.complete();
+      }
+    };
+
+    try {
+      await completer.future.timeout(const Duration(seconds: 10));
+      _log.info(HubLogCategory.calls, 'ICE gathering complete — all candidates embedded');
+    } catch (_) {
+      _log.warn(HubLogCategory.calls, 'ICE gathering timeout (10 s) — using partial candidates');
+    }
+
+    return (await _peerConnection!.getLocalDescription()) ?? fallback;
+  }
+
+  // ─── Poll loop ────────────────────────────────────────────────────────────
   void _startPolling() {
     _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
+      // Incoming call offer
       if (state.status == HubCallStatus.idle) {
         final offer = HubIncomingBuffer.instance.drainCallOffer();
         if (offer != null) {
@@ -75,6 +128,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
         }
       }
 
+      // Outgoing: wait for answer
       if (state.status == HubCallStatus.outgoing) {
         final answer = HubIncomingBuffer.instance.drainCallAnswer();
         if (answer != null) {
@@ -83,6 +137,10 @@ class HubCallNotifier extends Notifier<HubCallState> {
         }
       }
 
+      // Active / outgoing / incoming: process trickle-ICE candidates (fallback)
+      // If both sides use the complete-gathering approach the remote SDP already
+      // contains all candidates and addCandidate is rarely needed. We keep it
+      // as a fallback for cross-client compatibility.
       if (state.status == HubCallStatus.active ||
           state.status == HubCallStatus.outgoing ||
           state.status == HubCallStatus.incoming) {
@@ -95,17 +153,17 @@ class HubCallNotifier extends Notifier<HubCallState> {
           );
           if (_remoteDescSet && _peerConnection != null) {
             try {
-              _log.info(HubLogCategory.calls, 'Adding ICE candidate: ${c['candidate']}');
+              _log.info(HubLogCategory.calls, 'Adding trickle ICE candidate: ${c['candidate']}');
               await _peerConnection!.addCandidate(candidate);
             } catch (e) {
-              _log.warn(HubLogCategory.calls, 'Failed to add ICE candidate: $e');
+              _log.warn(HubLogCategory.calls, 'Failed to add trickle candidate: $e');
             }
           } else {
-            // Buffer until remote description is set
             _pendingCandidates.add(candidate);
-            _log.info(HubLogCategory.calls, 'Buffered ICE candidate (remote desc not ready yet)');
+            _log.info(HubLogCategory.calls, 'Buffered trickle ICE candidate (remote desc pending)');
           }
         }
+
         if (HubIncomingBuffer.instance.drainHangup()) {
           _log.info(HubLogCategory.calls, 'Remote hangup received');
           await endCall();
@@ -121,14 +179,16 @@ class HubCallNotifier extends Notifier<HubCallState> {
       try {
         await _peerConnection?.addCandidate(c);
       } catch (e) {
-        _log.warn(HubLogCategory.calls, 'Flushed candidate failed: $e');
+        _log.warn(HubLogCategory.calls, 'Buffered candidate failed: $e');
       }
     }
     _pendingCandidates.clear();
   }
 
+  // ─── Outgoing call ────────────────────────────────────────────────────────
   Future<void> startCall(Device device, HubCallType type) async {
-    _log.info(HubLogCategory.calls, 'Starting ${type.name} call to ${device.alias} (${device.ip}:${device.port})');
+    _log.info(HubLogCategory.calls,
+        'Starting ${type.name} call to ${device.alias} (${device.ip}:${device.port})');
     try {
       await _initRenderers();
       _remoteDescSet = false;
@@ -141,39 +201,35 @@ class HubCallNotifier extends Notifier<HubCallState> {
             ? {'width': 1280, 'height': 720, 'facingMode': 'user'}
             : false,
       };
-      _log.info(HubLogCategory.calls, 'Requesting getUserMedia: $constraints');
+      _log.info(HubLogCategory.calls, 'getUserMedia: $constraints');
       _localStream = await navigator.mediaDevices.getUserMedia(constraints);
       for (final track in _localStream!.getTracks()) {
         await _peerConnection!.addTrack(track, _localStream!);
       }
-      if (type == HubCallType.video) {
-        localRenderer.srcObject = _localStream;
-      }
+      if (type == HubCallType.video) localRenderer.srcObject = _localStream;
 
-      final offer = await _peerConnection!.createOffer();
-      await _peerConnection!.setLocalDescription(offer);
-      _log.info(HubLogCategory.calls, 'Created offer SDP (${offer.sdp?.length ?? 0} chars), sending to remote');
+      // ── Jami ICE approach: gather ALL candidates before sending SDP ──────
+      final initialOffer = await _peerConnection!.createOffer();
+      await _peerConnection!.setLocalDescription(initialOffer);
+      _log.info(HubLogCategory.calls, 'Waiting for ICE gathering to complete...');
+      final completeOffer = await _waitForGatheringComplete(initialOffer);
+      _log.info(HubLogCategory.calls,
+          'Sending complete offer SDP (${completeOffer.sdp?.length ?? 0} chars) to remote');
 
       final myAlias = ref.read(settingsProvider).alias;
       final myPort = ref.read(serverProvider)?.port ?? 53317;
       final myFingerprint = ref.read(securityProvider).certificateHash;
       final ip = device.ip;
       if (ip != null) {
-        await _httpPost(
-          ip,
-          device.port,
-          device.https,
-          '/hub/call/offer',
-          {
-            'sdp': offer.sdp,
-            'type': offer.type,
-            'callType': type.name,
-            'callerAlias': myAlias,
-            'callerPort': myPort,
-            'callerFingerprint': myFingerprint,
-            'callerHttps': device.https,
-          },
-        );
+        await _httpPost(ip, device.port, device.https, '/hub/call/offer', {
+          'sdp': completeOffer.sdp,
+          'type': completeOffer.type,
+          'callType': type.name,
+          'callerAlias': myAlias,
+          'callerPort': myPort,
+          'callerFingerprint': myFingerprint,
+          'callerHttps': device.https,
+        });
       }
 
       state = state.copyWith(
@@ -185,10 +241,12 @@ class HubCallNotifier extends Notifier<HubCallState> {
     } catch (e, st) {
       _log.error(HubLogCategory.calls, 'startCall failed: $e\n$st');
       HubRingbackService.instance.stopRingback();
+      await _setCallAudioMode(false);
       state = state.copyWith(status: HubCallStatus.idle, errorMessage: e.toString());
     }
   }
 
+  // ─── Accept incoming call ─────────────────────────────────────────────────
   Future<void> acceptCall() async {
     HubRingtoneService.instance.stop();
     final sdp = state.incomingSdp;
@@ -214,27 +272,33 @@ class HubCallNotifier extends Notifier<HubCallState> {
       for (final track in _localStream!.getTracks()) {
         await _peerConnection!.addTrack(track, _localStream!);
       }
-      if (type == HubCallType.video) {
-        localRenderer.srcObject = _localStream;
-      }
+      if (type == HubCallType.video) localRenderer.srcObject = _localStream;
 
-      await _peerConnection!.setRemoteDescription(RTCSessionDescription(sdp, sdpType ?? 'offer'));
+      // Remote offer already contains all candidates (complete-gathering approach)
+      await _peerConnection!.setRemoteDescription(
+        RTCSessionDescription(sdp, sdpType ?? 'offer'),
+      );
       _remoteDescSet = true;
       await _flushPendingCandidates();
 
-      final answer = await _peerConnection!.createAnswer();
-      await _peerConnection!.setLocalDescription(answer);
-      _log.info(HubLogCategory.calls, 'Created answer SDP, sending to ${device.ip}:${device.port}');
+      // ── Jami ICE approach: gather ALL candidates before sending answer ────
+      final initialAnswer = await _peerConnection!.createAnswer();
+      await _peerConnection!.setLocalDescription(initialAnswer);
+      _log.info(HubLogCategory.calls, 'Waiting for ICE gathering to complete (callee)...');
+      final completeAnswer = await _waitForGatheringComplete(initialAnswer);
+      _log.info(HubLogCategory.calls,
+          'Sending complete answer SDP (${completeAnswer.sdp?.length ?? 0} chars)');
 
       final ip = device.ip;
       if (ip != null) {
         await _httpPost(ip, device.port, device.https, '/hub/call/answer', {
-          'sdp': answer.sdp,
-          'type': answer.type,
+          'sdp': completeAnswer.sdp,
+          'type': completeAnswer.type,
         });
       }
 
-      // Enable speakerphone by default so both sides hear each other
+      // Enable Android call audio mode + speakerphone
+      await _setCallAudioMode(true);
       _setSpeakerphone(true);
 
       state = state.copyWith(
@@ -246,6 +310,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
       _log.info(HubLogCategory.calls, 'Call accepted — now active');
     } catch (e, st) {
       _log.error(HubLogCategory.calls, 'acceptCall failed: $e\n$st');
+      await _setCallAudioMode(false);
       state = state.copyWith(status: HubCallStatus.idle, errorMessage: e.toString());
     }
   }
@@ -314,37 +379,49 @@ class HubCallNotifier extends Notifier<HubCallState> {
     }
   }
 
+  // ─── Handle remote answer (caller side) ──────────────────────────────────
   Future<void> _handleRemoteAnswer(Map<String, dynamic> answer) async {
     try {
+      // Remote answer SDP already contains all candidates (complete-gathering approach)
       await _peerConnection?.setRemoteDescription(
         RTCSessionDescription(answer['sdp'] as String?, answer['type'] as String?),
       );
       _remoteDescSet = true;
       await _flushPendingCandidates();
 
-      // Enable speakerphone by default on call connect
+      await _setCallAudioMode(true);
       _setSpeakerphone(true);
 
       HubRingbackService.instance.stopRingback();
-      state = state.copyWith(status: HubCallStatus.active, startTime: DateTime.now(), isSpeakerOn: true);
+      state = state.copyWith(
+        status: HubCallStatus.active,
+        startTime: DateTime.now(),
+        isSpeakerOn: true,
+      );
       _log.info(HubLogCategory.calls, 'Remote answer applied — call active');
     } catch (e) {
       _log.error(HubLogCategory.calls, 'setRemoteDescription (answer) failed: $e');
     }
   }
 
+  // ─── Peer connection factory ──────────────────────────────────────────────
   Future<RTCPeerConnection> _createPeerConnection(Device device) async {
-    _log.info(HubLogCategory.calls, 'Creating RTCPeerConnection (LAN-only, no STUN)');
+    _log.info(HubLogCategory.calls, 'Creating RTCPeerConnection (LAN-only, no STUN/TURN)');
     final config = <String, dynamic>{
       'iceServers': [],
       'sdpSemantics': 'unified-plan',
+      // Restrict to local network candidates only (no server-reflexive, no relay)
+      'iceTransportPolicy': 'all',
     };
     final pc = await createPeerConnection(config);
 
+    // Still forward trickle ICE candidates to remote as a best-effort fallback.
+    // If the remote side supports the complete-gathering approach, these will
+    // simply be ignored (the SDP already had all the candidates).
     pc.onIceCandidate = (candidate) async {
-      _log.info(HubLogCategory.calls, 'ICE candidate → ${device.ip}: ${candidate.candidate}');
       final ip = device.ip;
-      if (ip != null) {
+      if (ip != null && candidate.candidate != null && candidate.candidate!.isNotEmpty) {
+        _log.info(HubLogCategory.calls, 'Trickle ICE → ${device.ip}: ${candidate.candidate}');
         await _httpPost(ip, device.port, device.https, '/hub/call/ice', {
           'candidate': candidate.candidate,
           'sdpMid': candidate.sdpMid,
@@ -357,7 +434,6 @@ class HubCallNotifier extends Notifier<HubCallState> {
       if (event.streams.isNotEmpty) {
         _log.info(HubLogCategory.calls, 'Remote track received (${event.track.kind})');
         remoteRenderer.srcObject = event.streams.first;
-        // Force a state refresh so RTCVideoView widgets rebuild with the new stream
         state = state.copyWith(
           status: HubCallStatus.active,
           startTime: state.startTime ?? DateTime.now(),
@@ -402,10 +478,17 @@ class HubCallNotifier extends Notifier<HubCallState> {
       localRenderer.srcObject = null;
       remoteRenderer.srcObject = null;
     } catch (_) {}
+    await _setCallAudioMode(false);
     _log.info(HubLogCategory.calls, 'Call resources cleaned up');
   }
 
-  Future<void> _httpPost(String ip, int port, bool https, String path, Map<String, dynamic> body) async {
+  Future<void> _httpPost(
+    String ip,
+    int port,
+    bool https,
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     final scheme = https ? 'https' : 'http';
     final url = '$scheme://$ip:$port$path';
     _log.info(HubLogCategory.calls, 'POST $url');

@@ -120,6 +120,29 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                // ── Call audio mode ──────────────────────────────────────────
+                // Must be called when a call becomes active / ends.
+                // Without MODE_IN_COMMUNICATION Android won't route audio
+                // through the earpiece/speaker path used by WebRTC, and echo
+                // cancellation + noise suppression won't engage.
+                "setCallAudioMode" -> {
+                    try {
+                        val active = call.argument<Boolean>("active") ?: false
+                        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                        if (active) {
+                            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                            // Default to earpiece; Flutter side calls setSpeakerphoneOn separately
+                            audioManager.isSpeakerphoneOn = false
+                        } else {
+                            audioManager.isSpeakerphoneOn = false
+                            audioManager.mode = AudioManager.MODE_NORMAL
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("AUDIO_MODE_ERROR", e.message, null)
+                    }
+                }
+
                 else -> result.notImplemented()
             }
         }
