@@ -411,14 +411,14 @@ class ReceiveController {
       if (checkPlatform([TargetPlatform.android]) && !server.getState().session!.destinationDirectory.startsWith('/storage/emulated/0/Download')) {
         // Android requires more permission to save files outside of the Download directory
         try {
-          final result = await Permission.storage.request();
+          final result = await Permission.manageExternalStorage.request();
           _logger.info('storage permission: $result');
         } catch (e) {
           _logger.warning('Could not request storage permission', e);
         }
       }
       try {
-        await Permission.storage.request();
+        await Permission.manageExternalStorage.request();
       } catch (e) {
         _logger.warning('Could not request storage permission', e);
       }

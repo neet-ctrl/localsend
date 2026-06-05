@@ -195,7 +195,7 @@ Future<void> _pickFiles(BuildContext context, Ref ref) async {
 Future<void> _pickFolder(BuildContext context, Ref ref) async {
   if (checkPlatform([TargetPlatform.android])) {
     try {
-      await Permission.storage.request();
+      await Permission.manageExternalStorage.request();
     } catch (e) {
       _logger.warning('Failed to request storage permission', e);
     }
