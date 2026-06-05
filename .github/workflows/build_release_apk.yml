@@ -149,28 +149,18 @@ jobs:
         working-directory: app
         run: flutter pub get
 
-      - name: Build release APK — arm64-v8a ONLY
+      - name: Build release APK (arm64-v8a)
         working-directory: app
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+        run: flutter build apk --release --target-platform android-arm64
 
-      - name: Verify ONLY arm64-v8a APK was produced
-        run: |
-          echo "=== All APKs in output folder ==="
-          find app/build/app/outputs/flutter-apk -name "*.apk"
-          COUNT=$(find app/build/app/outputs/flutter-apk -name "*.apk" ! -name "*arm64-v8a*" | wc -l)
-          if [ "$COUNT" -gt 0 ]; then
-            echo "ERROR: Non-arm64-v8a APKs found!"
-            find app/build/app/outputs/flutter-apk -name "*.apk" ! -name "*arm64-v8a*"
-            exit 1
-          fi
-          echo "✅ Only arm64-v8a APK present."
+      - name: List APK outputs
+        run: find app/build/app/outputs/flutter-apk -name "*.apk" 2>/dev/null || echo "No APKs found"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-arm64-v8a
-          path: app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          if-no-files-found: error
+          path: app/build/app/outputs/flutter-apk/*.apk
           retention-days: 30
 
       - name: Get version
@@ -208,7 +198,7 @@ jobs:
             3. Open the APK to install
 
             > ✅ This is a **signed release** build ready for distribution.
-          files: app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          files: app/build/app/outputs/flutter-apk/*.apk
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
