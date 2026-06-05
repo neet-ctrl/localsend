@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:localsend_app/config/theme.dart';
 import 'package:localsend_app/model/hub/hub_call_state.dart';
 import 'package:localsend_app/pages/hub/hub_chat_page.dart';
+import 'package:localsend_app/pages/hub/hub_debug_log_page.dart';
 import 'package:localsend_app/pages/hub/hub_remote_files_page.dart';
 import 'package:localsend_app/pages/hub/hub_video_call_page.dart';
 import 'package:localsend_app/pages/hub/hub_voice_call_page.dart';
@@ -321,24 +322,51 @@ class _CommunicationHubTabState extends State<CommunicationHubTab> with Refena {
                   color: isDark ? Colors.white : Colors.black,
                 ),
               ),
-              GestureDetector(
-                onTap: () => ref.global.dispatchAsync(StartSmartScan(forceLegacy: false)),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
-                    color: kAccentCyan.withValues(alpha: 0.08),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Debug logs button
+                  GestureDetector(
+                    onTap: () => context.push(() => const HubDebugLogPage()),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: kAccentPurple.withValues(alpha: 0.4)),
+                        color: kAccentPurple.withValues(alpha: 0.08),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.terminal_rounded, size: 14, color: kAccentPurple),
+                          SizedBox(width: 4),
+                          Text('Logs', style: TextStyle(color: kAccentPurple, fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.refresh_rounded, size: 14, color: kAccentCyan),
-                      SizedBox(width: 4),
-                      Text('Scan', style: TextStyle(color: kAccentCyan, fontSize: 12, fontWeight: FontWeight.w600)),
-                    ],
+                  const SizedBox(width: 8),
+                  // Scan button
+                  GestureDetector(
+                    onTap: () => ref.global.dispatchAsync(StartSmartScan(forceLegacy: false)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: kAccentCyan.withValues(alpha: 0.4)),
+                        color: kAccentCyan.withValues(alpha: 0.08),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.refresh_rounded, size: 14, color: kAccentCyan),
+                          SizedBox(width: 4),
+                          Text('Scan', style: TextStyle(color: kAccentCyan, fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ),

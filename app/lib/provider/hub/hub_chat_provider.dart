@@ -7,10 +7,13 @@ import 'package:localsend_app/model/hub/hub_message.dart';
 import 'package:localsend_app/provider/network/server/controller/hub_controller.dart';
 import 'package:localsend_app/provider/security_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
+import 'package:localsend_app/util/hub_http.dart';
+import 'package:localsend_app/util/hub_logger.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+final _log = HubLogger.instance;
 const _uuid = Uuid();
 const _prefsKeyPrefix = 'hub_chat_';
 
@@ -38,7 +41,8 @@ class HubChatState {
 
   List<HubMessage> messagesFor(String fingerprint) => conversations[fingerprint] ?? [];
 
-  int unreadCount(String fingerprint) => messagesFor(fingerprint).where((m) => !m.read && m.senderFingerprint == fingerprint).length;
+  int unreadCount(String fingerprint) =>
+      messagesFor(fingerprint).where((m) => !m.read && m.senderFingerprint == fingerprint).length;
 }
 
 final hubChatProvider = NotifierProvider<HubChatNotifier, HubChatState>(
@@ -64,17 +68,22 @@ class HubChatNotifier extends Notifier<HubChatState> {
       final fp = key.substring(_prefsKeyPrefix.length);
       final raw = _prefs!.getString(key) ?? '[]';
       try {
-        final list = (jsonDecode(raw) as List).map((e) => HubMessage.fromJson(e as Map<String, dynamic>)).toList();
+        final list =
+            (jsonDecode(raw) as List).map((e) => HubMessage.fromJson(e as Map<String, dynamic>)).toList();
         convos[fp] = list;
-      } catch (_) {}
+      } catch (e) {
+        _log.warn(HubLogCategory.messages, 'Failed to parse persisted conversation $fp: $e');
+      }
     }
     state = state.copyWith(conversations: convos);
+    _log.info(HubLogCategory.messages, 'Loaded ${convos.length} conversations from storage');
   }
 
   void _startPolling() {
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       final incoming = HubIncomingBuffer.instance.drainMessages();
       if (incoming.isEmpty) return;
+      _log.info(HubLogCategory.messages, 'Received ${incoming.length} incoming message(s)');
       final convos = Map<String, List<HubMessage>>.from(state.conversations);
       for (final msg in incoming) {
         final fp = msg.senderFingerprint;
@@ -83,6 +92,7 @@ class HubChatNotifier extends Notifier<HubChatState> {
           list.add(msg);
           convos[fp] = list;
           _persistConversation(fp, list);
+          _log.info(HubLogCategory.messages, 'New message from ${msg.senderAlias} (fp: ${fp.substring(0, 8)}…): "${msg.content}"');
         }
       }
       state = state.copyWith(conversations: convos);
@@ -110,19 +120,28 @@ class HubChatNotifier extends Notifier<HubChatState> {
     );
 
     final ip = device.ip;
+    final scheme = device.https ? 'https' : 'http';
+    final url = '$scheme://$ip:${device.port}/hub/message';
+    _log.info(HubLogCategory.messages, 'Sending message to ${device.alias} ($url): "$content"');
+
     if (ip != null) {
       try {
-        final client = HttpClient();
-        final scheme = device.https ? 'https' : 'http';
-        final request = await client.postUrl(Uri.parse('$scheme://$ip:${device.port}/hub/message'));
+        final client = lanHttpClient();
+        final request = await client.postUrl(Uri.parse(url));
         request.headers.contentType = ContentType.json;
         request.write(jsonEncode(msg.toJson()));
         final response = await request.close();
+        await response.drain<void>();
         msg.delivered = response.statusCode == 200;
         client.close();
-      } catch (_) {
+        _log.info(HubLogCategory.messages,
+            'Send result: status=${response.statusCode} delivered=${msg.delivered}');
+      } catch (e) {
         msg.delivered = false;
+        _log.error(HubLogCategory.messages, 'Send failed to ${device.alias}: $e');
       }
+    } else {
+      _log.warn(HubLogCategory.messages, 'Cannot send: device.ip is null for ${device.alias}');
     }
 
     final fp = device.fingerprint;
@@ -160,6 +179,7 @@ class HubChatNotifier extends Notifier<HubChatState> {
     convos.remove(fingerprint);
     state = state.copyWith(conversations: convos);
     _prefs?.remove('$_prefsKeyPrefix$fingerprint');
+    _log.info(HubLogCategory.messages, 'Cleared conversation for fp ${fingerprint.substring(0, 8)}…');
   }
 
   Future<void> _persistConversation(String fingerprint, List<HubMessage> messages) async {
@@ -167,5 +187,4 @@ class HubChatNotifier extends Notifier<HubChatState> {
     final raw = jsonEncode(messages.map((m) => m.toJson()).toList());
     await _prefs!.setString('$_prefsKeyPrefix$fingerprint', raw);
   }
-
 }

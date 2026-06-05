@@ -4,7 +4,11 @@ import 'dart:io';
 
 import 'package:common/model/device.dart';
 import 'package:localsend_app/model/hub/hub_remote_file.dart';
+import 'package:localsend_app/util/hub_http.dart';
+import 'package:localsend_app/util/hub_logger.dart';
 import 'package:refena_flutter/refena_flutter.dart';
+
+final _log = HubLogger.instance;
 
 class HubFilesState {
   final Device? remoteDevice;
@@ -79,6 +83,7 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
   HubFilesState init() => const HubFilesState();
 
   Future<void> openDevice(Device device) async {
+    _log.info(HubLogCategory.files, 'Opening device ${device.alias} (${device.ip}:${device.port} https=${device.https})');
     state = HubFilesState(remoteDevice: device, isLoading: true);
     await _loadPath('/');
   }
@@ -109,23 +114,29 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
     final device = state.remoteDevice;
     if (device?.ip == null) {
       state = state.copyWith(isLoading: false, error: 'Device not connected');
+      _log.error(HubLogCategory.files, 'Load path "$path" failed: device not connected');
       return;
     }
 
+    final scheme = device!.https ? 'https' : 'http';
+    final uri = Uri.parse('$scheme://${device.ip}:${device.port}/hub/files')
+        .replace(queryParameters: {'path': path});
+    _log.info(HubLogCategory.files, 'GET $uri');
+
     try {
-      final scheme = device!.https ? 'https' : 'http';
-      final uri = Uri.parse('$scheme://${device.ip}:${device.port}/hub/files')
-          .replace(queryParameters: {'path': path});
-      final client = HttpClient();
+      final client = lanHttpClient();
       final req = await client.getUrl(uri);
       final resp = await req.close();
       final body = await utf8.decoder.bind(resp).join();
       client.close();
 
+      _log.info(HubLogCategory.files, 'Response ${resp.statusCode} (${body.length} bytes)');
+
       if (resp.statusCode == 200) {
         final list = (jsonDecode(body) as List)
             .map((e) => HubRemoteFile.fromJson(e as Map<String, dynamic>))
             .toList();
+        _log.info(HubLogCategory.files, 'Loaded ${list.length} entries at "$path"');
         state = state.copyWith(
           currentPath: path,
           files: list,
@@ -134,9 +145,11 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
           clearError: true,
         );
       } else {
-        state = state.copyWith(isLoading: false, error: 'Failed to load: $body');
+        _log.warn(HubLogCategory.files, 'Server error ${resp.statusCode}: $body');
+        state = state.copyWith(isLoading: false, error: 'Server error ${resp.statusCode}: $body');
       }
-    } catch (e) {
+    } catch (e, st) {
+      _log.error(HubLogCategory.files, 'Exception loading "$path": $e\n$st');
       state = state.copyWith(isLoading: false, error: 'Connection error: $e');
     }
   }
@@ -166,11 +179,13 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
     final transfers = List<HubTransferItem>.from(state.transfers)..add(transfer);
     state = state.copyWith(transfers: transfers);
 
+    final scheme = device!.https ? 'https' : 'http';
+    final uri = Uri.parse('$scheme://${device.ip}:${device.port}/hub/file')
+        .replace(queryParameters: {'path': file.path});
+    _log.info(HubLogCategory.files, 'Download GET $uri → $savePath');
+
     try {
-      final scheme = device!.https ? 'https' : 'http';
-      final uri = Uri.parse('$scheme://${device.ip}:${device.port}/hub/file')
-          .replace(queryParameters: {'path': file.path});
-      final client = HttpClient();
+      final client = lanHttpClient();
       final req = await client.getUrl(uri);
       final resp = await req.close();
 
@@ -185,8 +200,10 @@ class HubFilesNotifier extends Notifier<HubFilesState> {
       await sink.close();
       client.close();
       transfer.done = true;
+      _log.info(HubLogCategory.files, 'Download complete: ${file.name} (${transfer.downloadedBytes} bytes)');
     } catch (e) {
       transfer.failed = true;
+      _log.error(HubLogCategory.files, 'Download failed for "${file.name}": $e');
     }
     state = state.copyWith(transfers: List.from(state.transfers));
   }
