@@ -675,7 +675,7 @@ class _PermissionsShortcutState extends State<_PermissionsShortcut> with Widgets
       Permission.camera,
       if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) Permission.notification,
       if (Platform.isAndroid) Permission.bluetoothConnect,
-      if (Platform.isAndroid) Permission.storage,
+      if (Platform.isAndroid) Permission.manageExternalStorage,
       if (Platform.isAndroid) Permission.ignoreBatteryOptimizations,
     ];
     int granted = 0;
