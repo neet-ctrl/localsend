@@ -255,7 +255,9 @@ class _HubVideoCallPageState extends State<HubVideoCallPage>
                             _VideoControlBtn(icon: callState.isMuted ? Icons.mic_off_rounded : Icons.mic_rounded, label: callState.isMuted ? 'Unmute' : 'Mute', active: callState.isMuted, onTap: callNotifier.toggleMute),
                             _VideoControlBtn(icon: callState.isVideoEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded, label: 'Camera', active: !callState.isVideoEnabled, onTap: callNotifier.toggleVideo),
                             _VideoControlBtn(icon: Icons.flip_camera_ios_rounded, label: 'Flip', active: false, onTap: () {}),
-                            _VideoCallBtn(icon: Icons.call_end_rounded, color: Colors.red, label: 'End', onTap: () { callNotifier.endCall(); context.pop(); }),
+                            // Do NOT call context.pop() here — endCall() transitions to
+                            // HubCallStatus.ended which the build() watcher pops cleanly.
+                            _VideoCallBtn(icon: Icons.call_end_rounded, color: Colors.red, label: 'End', onTap: callNotifier.endCall),
                           ],
                         ),
                 ),

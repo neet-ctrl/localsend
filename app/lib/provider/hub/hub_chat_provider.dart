@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:common/model/device.dart';
+import 'package:flutter/services.dart';
 import 'package:localsend_app/model/hub/hub_message.dart';
 import 'package:localsend_app/provider/network/server/controller/hub_controller.dart';
 import 'package:localsend_app/provider/network/server/server_provider.dart';
@@ -17,6 +18,7 @@ import 'package:uuid/uuid.dart';
 final _log = HubLogger.instance;
 const _uuid = Uuid();
 const _prefsKeyPrefix = 'hub_chat_';
+const _chatChannel = MethodChannel('org.localsend.localsend_app/localsend');
 
 class HubChatState {
   final Map<String, List<HubMessage>> conversations;
@@ -81,7 +83,7 @@ class HubChatNotifier extends Notifier<HubChatState> {
   }
 
   void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       final incoming = HubIncomingBuffer.instance.drainMessages();
       if (incoming.isEmpty) return;
       _log.info(HubLogCategory.messages, 'Received ${incoming.length} incoming message(s)');
@@ -94,10 +96,32 @@ class HubChatNotifier extends Notifier<HubChatState> {
           convos[fp] = list;
           _persistConversation(fp, list);
           _log.info(HubLogCategory.messages, 'New message from ${msg.senderAlias} (fp: ${fp.substring(0, 8)}…): "${msg.content}"');
+          // Show a system notification so the user sees the message even when
+          // on another app or the screen is locked.
+          await _showChatNotification(msg.senderAlias, msg.content, msg.type);
         }
       }
       state = state.copyWith(conversations: convos);
     });
+  }
+
+  Future<void> _showChatNotification(
+    String senderName,
+    String content,
+    HubMessageType type,
+  ) async {
+    if (!Platform.isAndroid) return;
+    try {
+      final preview = type == HubMessageType.text
+          ? (content.length > 80 ? '${content.substring(0, 77)}…' : content)
+          : '📎 ${content.length > 60 ? '${content.substring(0, 57)}…' : content}';
+      await _chatChannel.invokeMethod('showChatNotification', {
+        'senderName': senderName,
+        'message': preview,
+      });
+    } catch (e) {
+      _log.warn(HubLogCategory.messages, 'showChatNotification error: $e');
+    }
   }
 
   Future<void> sendMessage({

@@ -10,7 +10,10 @@ import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.GeneratedPluginRegistrant
+
+private const val SVC_CHANNEL = "org.localsend.localsend_app/localsend"
 
 const val HUB_ENGINE_ID = "localsend_hub_bg_engine"
 const val HUB_NOTIFICATION_ID = 1001
@@ -60,6 +63,66 @@ class HubForegroundService : Service() {
             DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "main")
         )
         FlutterEngineCache.getInstance().put(HUB_ENGINE_ID, engine)
+
+        // Set up a MethodChannel handler for overlay and permission calls so
+        // they work even when MainActivity is not running (app fully backgrounded).
+        // When MainActivity becomes active it overrides this handler with its own.
+        setupOverlayChannel(engine)
+    }
+
+    /**
+     * Registers a lightweight MethodChannel handler on the Flutter engine so
+     * that overlay calls (showCallOverlay / dismissCallOverlay / permission
+     * checks) work even when MainActivity is not in the foreground.
+     *
+     * MainActivity's configureFlutterEngine() sets its own handler which
+     * overrides this one while the Activity is alive — that is intentional.
+     */
+    private fun setupOverlayChannel(engine: FlutterEngine) {
+        MethodChannel(engine.dartExecutor.binaryMessenger, SVC_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "checkOverlayPermission" -> {
+                        result.success(IncomingCallOverlay.canDrawOverlays(applicationContext))
+                    }
+
+                    // Cannot open Settings from a Service — return quietly.
+                    "requestOverlayPermission" -> result.success(null)
+
+                    "showCallOverlay" -> {
+                        val callerName = call.argument<String>("callerName") ?: "Unknown"
+                        val callType   = call.argument<String>("callType")   ?: "voice"
+                        IncomingCallOverlay.show(
+                            applicationContext, callerName, callType,
+                            onAccept = {
+                                // Bring MainActivity to the front with the
+                                // accept action — onNewIntent fires the call.
+                                applicationContext.startActivity(
+                                    Intent(applicationContext, MainActivity::class.java).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                        putExtra("callAction", "accept")
+                                    }
+                                )
+                            },
+                            onDecline = {
+                                // Invoke back to Dart on this engine directly.
+                                MethodChannel(
+                                    engine.dartExecutor.binaryMessenger, SVC_CHANNEL
+                                ).invokeMethod("notificationCallAction", "decline")
+                            },
+                        )
+                        result.success(null)
+                    }
+
+                    "dismissCallOverlay" -> {
+                        IncomingCallOverlay.dismiss()
+                        result.success(null)
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     private fun createNotificationChannel() {

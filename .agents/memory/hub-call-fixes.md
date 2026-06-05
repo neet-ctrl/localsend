@@ -33,6 +33,19 @@ Also: the "End Call" button in hub_voice_call_page called BOTH `context.pop()` A
 - Do NOT dispose renderers in `_cleanup()`. They are notifier-lifetime objects reused across calls. Disposing them between calls causes "initialized on disposed renderer" crashes on the next call.
 - Initialize once via `_renderersInitialized` flag; only clear `srcObject` in cleanup.
 
+## Bug 5 — ICE gathering race condition (silence AND no video)
+**Root cause**: `_waitForGatheringComplete` set `onIceGatheringState` AFTER calling `setLocalDescription`. On a fast LAN the ICE gathering completes in milliseconds — the "complete" event fires before the listener is attached, is missed, and the code waits the full 10-second timeout on EVERY call. This caused ~10s of silence/black screen before media could flow.  
+**Fix**: Renamed to `_setLocalDescriptionAndGather`. Handler is attached BEFORE `setLocalDescription` is called — no race. Timeout reduced to 6s as a safety net only.  
+**Rule**: Always set WebRTC event handlers before the action that triggers them.
+
+## Bug 6 — Video call page double-pop
+**Root cause**: Same as voice call (Bug 2). The End button in `hub_video_call_page.dart` called `callNotifier.endCall(); context.pop()` while `build()` also popped on `ended` state.  
+**Fix**: Removed `context.pop()` from End button; state-based pop handles navigation.
+
+## Bug 7 — No chat message notifications
+**Root cause**: No system notification was fired when new Hub messages arrived. Only an in-app banner was shown (home_page.dart), invisible when backgrounded.  
+**Fix**: `hub_chat_provider.dart` poll loop calls `_showChatNotification(senderAlias, content, type)` for each genuinely new message. `MainActivity.kt` handles `showChatNotification` MethodChannel call and fires a per-sender heads-up notification (IMPORTANCE_HIGH, `CATEGORY_MESSAGE`). Notification IDs are unique per sender name so messages from different people don't overwrite each other.
+
 ## Key files
 - `app/lib/provider/hub/hub_call_provider.dart` — all call logic, guards, notification calls
 - `app/lib/pages/hub/hub_voice_call_page.dart` — removed double-pop from End Call button

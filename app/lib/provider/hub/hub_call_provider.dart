@@ -44,7 +44,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
   @override
   HubCallState init() {
-    // Listen for incoming accept/decline actions triggered by notification buttons
+    // Listen for incoming accept/decline actions triggered by notification
+    // buttons or overlay window buttons.
     _platform.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'notificationCallAction':
@@ -59,7 +60,52 @@ class HubCallNotifier extends Notifier<HubCallState> {
       }
     });
     _startPolling();
+    // Proactively check for the overlay permission and request it if absent.
+    // This opens the system settings page once so the user can grant it,
+    // ensuring future incoming calls show the full-screen overlay.
+    _checkAndRequestOverlayPermission();
     return const HubCallState();
+  }
+
+  // ─── Overlay permission ───────────────────────────────────────────────────
+  Future<void> _checkAndRequestOverlayPermission() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final granted =
+          await _platform.invokeMethod<bool>('checkOverlayPermission') ?? false;
+      if (!granted) {
+        _log.info(HubLogCategory.calls,
+            'Overlay permission not granted — opening system settings');
+        await _platform.invokeMethod('requestOverlayPermission');
+      } else {
+        _log.info(HubLogCategory.calls, 'Overlay permission already granted');
+      }
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'checkOverlayPermission error: $e');
+    }
+  }
+
+  // ─── Call overlay ─────────────────────────────────────────────────────────
+  Future<void> _showCallOverlay(String callerName, HubCallType type) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _platform.invokeMethod('showCallOverlay', {
+        'callerName': callerName,
+        'callType': type.name,
+      });
+      _log.info(HubLogCategory.calls, 'showCallOverlay($callerName) OK');
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'showCallOverlay error: $e');
+    }
+  }
+
+  Future<void> _dismissCallOverlay() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _platform.invokeMethod('dismissCallOverlay');
+    } catch (e) {
+      _log.warn(HubLogCategory.calls, 'dismissCallOverlay error: $e');
+    }
   }
 
   // ─── Platform audio mode ──────────────────────────────────────────────────
@@ -96,12 +142,17 @@ class HubCallNotifier extends Notifier<HubCallState> {
     }
   }
 
-  // ─── ICE gathering — Jami approach ───────────────────────────────────────
-  Future<RTCSessionDescription> _waitForGatheringComplete(
-    RTCSessionDescription fallback,
+  // ─── ICE gathering ───────────────────────────────────────────────────────
+  // IMPORTANT: the gathering-state handler MUST be attached BEFORE calling
+  // setLocalDescription — otherwise on fast LAN networks the "complete" event
+  // fires before the listener is registered and we miss it, causing a full
+  // timeout delay on every call (which looks like silence / no video).
+  Future<RTCSessionDescription> _setLocalDescriptionAndGather(
+    RTCSessionDescription desc,
   ) async {
     final completer = Completer<void>();
 
+    // Attach handler FIRST, then set local description.
     _peerConnection!.onIceGatheringState = (RTCIceGatheringState s) {
       _log.info(HubLogCategory.calls, 'ICE gathering state: $s');
       if (s == RTCIceGatheringState.RTCIceGatheringStateComplete &&
@@ -110,14 +161,16 @@ class HubCallNotifier extends Notifier<HubCallState> {
       }
     };
 
+    await _peerConnection!.setLocalDescription(desc);
+
     try {
-      await completer.future.timeout(const Duration(seconds: 10));
+      await completer.future.timeout(const Duration(seconds: 6));
       _log.info(HubLogCategory.calls, 'ICE gathering complete — all candidates embedded');
     } catch (_) {
-      _log.warn(HubLogCategory.calls, 'ICE gathering timeout (10 s) — using partial candidates');
+      _log.warn(HubLogCategory.calls, 'ICE gathering timeout (6 s) — using partial SDP');
     }
 
-    return (await _peerConnection!.getLocalDescription()) ?? fallback;
+    return (await _peerConnection!.getLocalDescription()) ?? desc;
   }
 
   // ─── Poll loop ────────────────────────────────────────────────────────────
@@ -155,8 +208,10 @@ class HubCallNotifier extends Notifier<HubCallState> {
             incomingSdpType: offer['type'] as String?,
           );
           HubRingtoneService.instance.start();
-          // Show heads-up / full-screen notification so user sees the call
-          // even when on another app or the screen is locked.
+          // Show the full-screen TYPE_APPLICATION_OVERLAY window (appears on
+          // top of every app including lock screen when SYSTEM_ALERT_WINDOW is
+          // granted) AND a heads-up notification as fallback.
+          await _showCallOverlay(deviceAlias, callType);
           await _showIncomingCallNotification(deviceAlias, callType);
         }
       }
@@ -241,9 +296,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
       if (type == HubCallType.video) localRenderer.srcObject = _localStream;
 
       final initialOffer = await _peerConnection!.createOffer();
-      await _peerConnection!.setLocalDescription(initialOffer);
-      _log.info(HubLogCategory.calls, 'Waiting for ICE gathering to complete...');
-      final completeOffer = await _waitForGatheringComplete(initialOffer);
+      _log.info(HubLogCategory.calls, 'Waiting for ICE gathering (caller)...');
+      final completeOffer = await _setLocalDescriptionAndGather(initialOffer);
       _log.info(HubLogCategory.calls,
           'Sending complete offer SDP (${completeOffer.sdp?.length ?? 0} chars) to remote');
 
@@ -282,6 +336,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
   // ─── Accept incoming call ─────────────────────────────────────────────────
   Future<void> acceptCall() async {
     HubRingtoneService.instance.stop();
+    await _dismissCallOverlay();
     await _dismissCallNotification();
     final sdp = state.incomingSdp;
     final sdpType = state.incomingSdpType;
@@ -320,9 +375,8 @@ class HubCallNotifier extends Notifier<HubCallState> {
       await _flushPendingCandidates();
 
       final initialAnswer = await _peerConnection!.createAnswer();
-      await _peerConnection!.setLocalDescription(initialAnswer);
-      _log.info(HubLogCategory.calls, 'Waiting for ICE gathering to complete (callee)...');
-      final completeAnswer = await _waitForGatheringComplete(initialAnswer);
+      _log.info(HubLogCategory.calls, 'Waiting for ICE gathering (callee)...');
+      final completeAnswer = await _setLocalDescriptionAndGather(initialAnswer);
       _log.info(HubLogCategory.calls,
           'Sending complete answer SDP (${completeAnswer.sdp?.length ?? 0} chars)');
 
@@ -350,6 +404,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
 
   Future<void> rejectCall() async {
     HubRingtoneService.instance.stop();
+    await _dismissCallOverlay();
     await _dismissCallNotification();
     final device = state.remoteDevice;
     final ip = device?.ip;
@@ -372,6 +427,7 @@ class HubCallNotifier extends Notifier<HubCallState> {
     try {
       HubRingtoneService.instance.stop();
       HubRingbackService.instance.stopRingback();
+      await _dismissCallOverlay();
       await _dismissCallNotification();
       final device = state.remoteDevice;
       final ip = device?.ip;

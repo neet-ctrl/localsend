@@ -32,6 +32,10 @@ private const val CALL_CHANNEL_ID   = "localsend_incoming_call"
 private const val CALL_CHANNEL_NAME = "Incoming Calls"
 private const val INCOMING_CALL_NOTIFICATION_ID = 1002
 
+private const val CHAT_CHANNEL_ID   = "localsend_chat"
+private const val CHAT_CHANNEL_NAME = "Chat Messages"
+private const val CHAT_NOTIFICATION_ID = 1003
+
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
     private var ringbackTone: ToneGenerator? = null
@@ -172,6 +176,73 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                // ── Chat message notification ────────────────────────────────
+                // Fires whenever a new Hub chat message arrives.  Shows a
+                // standard IMPORTANCE_HIGH heads-up notification so the user
+                // sees the message even when on another app or screen is locked.
+                "showChatNotification" -> {
+                    try {
+                        val senderName = call.argument<String>("senderName") ?: "Unknown"
+                        val message    = call.argument<String>("message")    ?: ""
+                        showChatMessageNotification(senderName, message)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("NOTIFICATION_ERROR", e.message, null)
+                    }
+                }
+
+                // ── Overlay permission (SYSTEM_ALERT_WINDOW) ─────────────────
+                // Returns true/false whether the permission is already granted.
+                "checkOverlayPermission" -> {
+                    result.success(IncomingCallOverlay.canDrawOverlays(applicationContext))
+                }
+
+                // Opens the system Settings page where the user can grant the
+                // "Display over other apps" permission.  Safe to call even if
+                // already granted (settings page just shows the toggle as on).
+                "requestOverlayPermission" -> {
+                    try {
+                        if (!IncomingCallOverlay.canDrawOverlays(applicationContext)) {
+                            val intent = android.content.Intent(
+                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                android.net.Uri.parse("package:$packageName"),
+                            ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                            startActivity(intent)
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("OVERLAY_ERROR", e.message, null)
+                    }
+                }
+
+                // ── Overlay window ───────────────────────────────────────────
+                // Shows a full-screen TYPE_APPLICATION_OVERLAY window on top of
+                // every app (including lock screen) via SYSTEM_ALERT_WINDOW.
+                "showCallOverlay" -> {
+                    try {
+                        val callerName = call.argument<String>("callerName") ?: "Unknown"
+                        val callType   = call.argument<String>("callType")   ?: "voice"
+                        IncomingCallOverlay.show(
+                            applicationContext, callerName, callType,
+                            onAccept = {
+                                // Invoke directly back to Flutter (handler below)
+                                methodChannel?.invokeMethod("notificationCallAction", "accept")
+                            },
+                            onDecline = {
+                                methodChannel?.invokeMethod("notificationCallAction", "decline")
+                            },
+                        )
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("OVERLAY_ERROR", e.message, null)
+                    }
+                }
+
+                "dismissCallOverlay" -> {
+                    IncomingCallOverlay.dismiss()
+                    result.success(null)
+                }
+
                 else -> result.notImplemented()
             }
         }
@@ -279,6 +350,59 @@ class MainActivity : FlutterActivity() {
     private fun dismissCallNotification() {
         val nm = getSystemService(NotificationManager::class.java) ?: return
         nm.cancel(INCOMING_CALL_NOTIFICATION_ID)
+    }
+
+    // ── Chat notifications ────────────────────────────────────────────────────
+
+    private fun createChatNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        if (nm.getNotificationChannel(CHAT_CHANNEL_ID) != null) return
+        val channel = NotificationChannel(
+            CHAT_CHANNEL_ID,
+            CHAT_CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "LocalSend Hub chat messages"
+            enableVibration(true)
+        }
+        nm.createNotificationChannel(channel)
+    }
+
+    private fun showChatMessageNotification(senderName: String, message: String) {
+        createChatNotificationChannel()
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openPi = PendingIntent.getActivity(
+            this, 20, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHAT_CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
+
+        builder
+            .setSmallIcon(android.R.drawable.ic_dialog_email)
+            .setContentTitle(senderName)
+            .setContentText(message)
+            .setContentIntent(openPi)
+            .setAutoCancel(true)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            builder.setCategory(Notification.CATEGORY_MESSAGE)
+        }
+
+        // Use a unique ID per sender so messages from different senders
+        // don't overwrite each other.
+        val notifId = CHAT_NOTIFICATION_ID + senderName.hashCode().and(0xFFFF)
+        nm.notify(notifId, builder.build())
     }
 
     // ─────────────────────────────────────────────────────────────────────────
