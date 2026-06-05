@@ -28,9 +28,9 @@ class HubRemoteFilesPage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kAccentCyan),
           onPressed: () {
             if (state.pathStack.isNotEmpty) {
-              context.read(hubFilesProvider.notifier).goBack();
+              context.notifier(hubFilesProvider).goBack();
             } else {
-              context.read(hubFilesProvider.notifier).reset();
+              context.notifier(hubFilesProvider).reset();
               context.pop();
             }
           },
@@ -48,7 +48,7 @@ class HubRemoteFilesPage extends StatelessWidget {
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh_rounded, color: kAccentCyan), onPressed: () => context.read(hubFilesProvider.notifier).refresh()),
+          IconButton(icon: const Icon(Icons.refresh_rounded, color: kAccentCyan), onPressed: () => context.notifier(hubFilesProvider).refresh()),
         ],
       ),
       body: Column(
@@ -81,7 +81,7 @@ class HubRemoteFilesPage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         children: [
           GestureDetector(
-            onTap: () => context.read(hubFilesProvider.notifier).navigate('/'),
+            onTap: () => context.notifier(hubFilesProvider).navigate('/'),
             child: const Center(child: Icon(Icons.home_rounded, color: kAccentCyan, size: 18)),
           ),
           ...parts.map((part) => Row(
@@ -132,7 +132,7 @@ class HubRemoteFilesPage extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, size: 16),
-                  onPressed: () => context.read(hubFilesProvider.notifier).removeTransfer(t.id),
+                  onPressed: () => context.notifier(hubFilesProvider).removeTransfer(t.id),
                   color: isDark ? const Color(0xFF6B7FA3) : Colors.grey,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
@@ -159,7 +159,7 @@ class HubRemoteFilesPage extends StatelessWidget {
             Text(error, style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4)), textAlign: TextAlign.center),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: () => context.read(hubFilesProvider.notifier).refresh(),
+              onPressed: () => context.notifier(hubFilesProvider).refresh(),
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Retry'),
               style: FilledButton.styleFrom(backgroundColor: kAccentCyan, foregroundColor: Colors.black),
@@ -195,12 +195,12 @@ class HubRemoteFilesPage extends StatelessWidget {
           child: GestureDetector(
             onTap: () {
               if (file.isDirectory) {
-                context.read(hubFilesProvider.notifier).navigate(file.path);
+                context.notifier(hubFilesProvider).navigate(file.path);
               } else if (state.selectedFiles.isNotEmpty) {
-                context.read(hubFilesProvider.notifier).toggleSelection(file.path);
+                context.notifier(hubFilesProvider).toggleSelection(file.path);
               }
             },
-            onLongPress: () => context.read(hubFilesProvider.notifier).toggleSelection(file.path),
+            onLongPress: () => context.notifier(hubFilesProvider).toggleSelection(file.path),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
@@ -273,7 +273,7 @@ class HubRemoteFilesPage extends StatelessWidget {
     try {
       final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
       final savePath = '${dir.path}/${file.name}';
-      context.read(hubFilesProvider.notifier).downloadFile(file, savePath);
+      context.notifier(hubFilesProvider).downloadFile(file, savePath);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

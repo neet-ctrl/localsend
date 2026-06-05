@@ -28,7 +28,7 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(hubChatProvider.notifier).markRead(widget.device.fingerprint);
+      ref.notifier(hubChatProvider).markRead(widget.device.fingerprint);
       _scrollToBottom();
     });
   }
@@ -51,7 +51,7 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
       _replyToId = null;
       _replyToContent = null;
     });
-    await ref.read(hubChatProvider.notifier).sendMessage(device: widget.device, content: text);
+    await ref.notifier(hubChatProvider).sendMessage(device: widget.device, content: text);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
@@ -59,7 +59,7 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
     final result = await FilePicker.platform.pickFiles();
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
-    await ref.read(hubChatProvider.notifier).sendMessage(
+    await ref.notifier(hubChatProvider).sendMessage(
       device: widget.device,
       content: file.path ?? '',
       type: HubMessageType.file,
@@ -119,7 +119,7 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
         ),
         actions: [
           IconButton(icon: const Icon(Icons.delete_outline_rounded, color: kAccentCyan), onPressed: () {
-            ref.read(hubChatProvider.notifier).clearConversation(widget.device.fingerprint);
+            ref.notifier(hubChatProvider).clearConversation(widget.device.fingerprint);
           }),
         ],
       ),
@@ -144,7 +144,7 @@ class _HubChatPageState extends State<HubChatPage> with Refena {
                           _replyToContent = msg.content;
                         }),
                         onCopy: () => Clipboard.setData(ClipboardData(text: msg.content)),
-                        onDelete: () => ref.read(hubChatProvider.notifier).deleteMessage(widget.device.fingerprint, msg.id),
+                        onDelete: () => ref.notifier(hubChatProvider).deleteMessage(widget.device.fingerprint, msg.id),
                       );
                     },
                   ),

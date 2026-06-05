@@ -54,7 +54,7 @@ class _HubVideoCallPageState extends State<HubVideoCallPage> with Refena {
   @override
   Widget build(BuildContext context) {
     final callState = context.watch(hubCallProvider);
-    final callNotifier = ref.read(hubCallProvider.notifier);
+    final callNotifier = ref.notifier(hubCallProvider);
 
     if (callState.status == HubCallStatus.active) _startTimer();
     if (callState.status == HubCallStatus.ended) {

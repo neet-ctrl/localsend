@@ -556,12 +556,12 @@ class _DeviceCard extends StatelessWidget {
   }
 
   void _startVoiceCall(BuildContext context) {
-    context.read(hubCallProvider.notifier).startCall(device, HubCallType.voice);
+    context.notifier(hubCallProvider).startCall(device, HubCallType.voice);
     context.push(() => const HubVoiceCallPage());
   }
 
   void _startVideoCall(BuildContext context) {
-    context.read(hubCallProvider.notifier).startCall(device, HubCallType.video);
+    context.notifier(hubCallProvider).startCall(device, HubCallType.video);
     context.push(() => const HubVideoCallPage());
   }
 
@@ -570,7 +570,7 @@ class _DeviceCard extends StatelessWidget {
   }
 
   void _openFiles(BuildContext context) {
-    context.read(hubFilesProvider.notifier).openDevice(device);
+    context.notifier(hubFilesProvider).openDevice(device);
     context.push(() => HubRemoteFilesPage(device: device));
   }
 }

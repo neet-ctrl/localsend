@@ -12,7 +12,7 @@ class HubRingtoneService {
     if (_active) return;
     _active = true;
     if (Platform.isAndroid) {
-      await FlutterRingtonePlayer.playRingtone(looping: true);
+      await FlutterRingtonePlayer().playRingtone(looping: true);
     }
   }
 
@@ -20,7 +20,7 @@ class HubRingtoneService {
     if (!_active) return;
     _active = false;
     if (Platform.isAndroid) {
-      await FlutterRingtonePlayer.stop();
+      await FlutterRingtonePlayer().stop();
     }
   }
 }

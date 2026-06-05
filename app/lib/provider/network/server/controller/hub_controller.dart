@@ -172,7 +172,7 @@ class HubController {
       }
       final stat = await file.stat();
       request.response.headers.set(HttpHeaders.contentLengthHeader, stat.size);
-      request.response.headers.set(HttpHeaders.contentDispositionHeader,
+      request.response.headers.set('content-disposition',
           'attachment; filename="${file.path.split(Platform.pathSeparator).last}"');
       await request.response.addStream(file.openRead());
       await request.response.close();
