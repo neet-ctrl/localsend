@@ -60,6 +60,7 @@ class ReceivePage extends StatefulWidget {
 
 class _ReceivePageState extends State<ReceivePage> with Refena {
   bool _showFullIp = false;
+  SessionStatus? _prevStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -76,12 +77,11 @@ class _ReceivePageState extends State<ReceivePage> with Refena {
         ref.dispose(widget.vm);
         unawaited(TaskbarHelper.clearProgressBar());
       },
-      listener: (ref, prev, next) {
-        if (prev.status != next.status) {
-          unawaited(TaskbarHelper.visualizeStatus(next.status));
-        }
-      },
       builder: (context, vm) {
+        if (vm.status != _prevStatus) {
+          _prevStatus = vm.status;
+          unawaited(TaskbarHelper.visualizeStatus(vm.status));
+        }
         // Early return INSIDE the builder — ViewModelBuilder stays alive
         if (vm.status == null && vm.message == null) {
           return const Scaffold(body: SizedBox());

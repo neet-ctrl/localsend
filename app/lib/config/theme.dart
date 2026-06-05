@@ -263,7 +263,6 @@ ThemeData _buildSpaceTheme(Brightness brightness) {
     ),
     toggleButtonsTheme: ToggleButtonsThemeData(
       selectedColor: kAccentCyan,
-      selectedFillColor: kAccentCyan.withValues(alpha: 0.15),
       color: isDark ? const Color(0xFF6B7FA3) : const Color(0xFF9AA5B4),
       borderColor: isDark ? kGlassBorder : const Color(0x1A000000),
       selectedBorderColor: kAccentCyan.withValues(alpha: 0.4),
