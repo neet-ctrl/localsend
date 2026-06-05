@@ -17,6 +17,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fetch upstream core Rust crate
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/localsend/localsend.git _upstream
+          cd _upstream && git sparse-checkout set core
+          cp -r core ../ && cd .. && rm -rf _upstream
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
